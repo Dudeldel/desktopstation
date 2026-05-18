@@ -1,0 +1,18 @@
+# Copy to config.yaml and customize. config.yaml is gitignored.
+
+serial:
+  device: /dev/ttyACM0
+  baudrate: 921600
+  reconnect_interval_sec: 2
+
+bridge:
+  mode: serial  # alternatives: mock
+
+heartbeat:
+  interval_sec: 5.0
+  timeout_sec: 15.0
+
+logging:
+  level: INFO
+  file: ~/.local/share/deskstation/logs/daemon.jsonl
+  pretty_console: false
