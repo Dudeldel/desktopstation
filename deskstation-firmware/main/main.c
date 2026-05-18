@@ -120,8 +120,5 @@ void app_main(void)
     int n = protocol_serialize_hello(buf, sizeof(buf), FIRMWARE_VERSION);
     if (n > 0) send_line(buf);
 
-    n = protocol_serialize_screen_changed(buf, sizeof(buf), "boot");
-    if (n > 0) send_line(buf);
-
     ESP_LOGI(TAG, "boot complete");
 }

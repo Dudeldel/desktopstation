@@ -1,7 +1,9 @@
 #include "protocol.h"
 
 #include "cJSON.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -66,18 +68,14 @@ done:
 int protocol_serialize_hello(char *buf, size_t cap, const char *firmware_version)
 {
     return snprintf(buf, cap,
-        "{\"v\":1,\"type\":\"hello\",\"data\":{\"firmware_version\":\"%s\"}}",
-        firmware_version);
+        "{\"v\":1,\"type\":\"hello\",\"data\":{\"firmware_version\":\"%s\","
+        "\"free_heap\":%u,\"psram_free\":%u}}",
+        firmware_version,
+        (unsigned)esp_get_free_heap_size(),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
 int protocol_serialize_heartbeat(char *buf, size_t cap)
 {
     return snprintf(buf, cap, "{\"v\":1,\"type\":\"heartbeat\",\"data\":{}}");
-}
-
-int protocol_serialize_screen_changed(char *buf, size_t cap, const char *screen)
-{
-    return snprintf(buf, cap,
-        "{\"v\":1,\"type\":\"screen_changed\",\"data\":{\"screen\":\"%s\"}}",
-        screen);
 }

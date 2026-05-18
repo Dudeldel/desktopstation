@@ -34,4 +34,3 @@ typedef struct {
 bool protocol_parse(const char *line, parsed_msg_t *out);
 int protocol_serialize_hello(char *buf, size_t cap, const char *firmware_version);
 int protocol_serialize_heartbeat(char *buf, size_t cap);
-int protocol_serialize_screen_changed(char *buf, size_t cap, const char *screen);
