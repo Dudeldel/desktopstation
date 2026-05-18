@@ -43,7 +43,7 @@ class FakeStreamPair:
             return b""
         try:
             chunk = await asyncio.wait_for(self.device_to_host.get(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return b""
         return chunk
 
