@@ -39,3 +39,15 @@ async def test_stream_ends_after_close() -> None:
     async for env in bridge.stream():
         received.append(env)
     assert received == []
+
+
+async def test_stream_drains_inbound_after_close() -> None:
+    """Messages injected before close() must still be yielded."""
+    bridge = MockBridge()
+    msg1 = HeartbeatMsg(data=HeartbeatData())
+    msg2 = HeartbeatMsg(data=HeartbeatData())
+    await bridge.inject(msg1)
+    await bridge.inject(msg2)
+    await bridge.close()
+    received = [env async for env in bridge.stream()]
+    assert received == [msg1, msg2]

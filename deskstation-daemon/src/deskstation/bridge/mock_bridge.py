@@ -24,7 +24,11 @@ class MockBridge:
         await self._outbound.put(envelope)
 
     async def stream(self) -> AsyncIterator[Envelope]:
-        while not self._closed:
+        # On close, drain remaining inbound before exiting — preserves
+        # the invariant "what was injected before close gets yielded".
+        while True:
+            if self._closed and self._inbound.empty():
+                return
             try:
                 yield await asyncio.wait_for(self._inbound.get(), timeout=0.05)
             except TimeoutError:
