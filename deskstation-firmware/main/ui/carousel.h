@@ -18,3 +18,7 @@ void carousel_set_active(int index, bool animate);
 
 // Return current tile index 0..3 based on tileview's scroll position.
 int carousel_active(void);
+
+// Pause / resume the autoscroll timer (used by pomodoro overlay).
+void carousel_autoscroll_pause(void);
+void carousel_autoscroll_resume(void);

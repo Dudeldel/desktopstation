@@ -6,6 +6,7 @@ idf_component_register(
         "protocol.c"
         "ui_state.c"
         "ui/carousel.c"
+        "ui/dots.c"
         "ui/theme.c"
         "ui/toast.c"
         "ui/top_bar.c"
