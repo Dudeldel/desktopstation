@@ -111,8 +111,8 @@ void app_main(void)
     ESP_ERROR_CHECK(usb_cdc_init());
     ESP_ERROR_CHECK(usb_cdc_start_tasks());
 
-    xTaskCreatePinnedToCore(ui_dispatch_task, "ui_dispatch", 4096, NULL, 3, NULL, 0);
-    xTaskCreatePinnedToCore(heartbeat_task, "heartbeat", 4096, NULL, 4, NULL, 0);
+    xTaskCreatePinnedToCore(ui_dispatch_task, "ui_dispatch", 8192, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(heartbeat_task, "heartbeat", 8192, NULL, 4, NULL, 0);
 
     s_last_rx_ms = now_ms();
 

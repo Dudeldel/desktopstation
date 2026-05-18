@@ -88,7 +88,7 @@ QueueHandle_t usb_cdc_tx_queue(void) { return s_tx_queue; }
 
 esp_err_t usb_cdc_start_tasks(void)
 {
-    if (xTaskCreatePinnedToCore(tx_task, "usb_tx", 4096, NULL, 5, NULL, 0) != pdPASS) {
+    if (xTaskCreatePinnedToCore(tx_task, "usb_tx", 8192, NULL, 5, NULL, 0) != pdPASS) {
         return ESP_FAIL;
     }
     return ESP_OK;

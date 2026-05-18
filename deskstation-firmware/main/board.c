@@ -1,6 +1,6 @@
 #include "board.h"
 
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "esp_check.h"
 #include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch_gt911.h"
@@ -80,21 +80,21 @@ static esp_err_t init_rgb_panel(esp_lcd_panel_handle_t *out_panel)
 
 static esp_err_t init_touch(esp_lcd_touch_handle_t *out_touch)
 {
-    i2c_config_t i2c_conf = {
-        .mode = I2C_MODE_MASTER,
+    i2c_master_bus_handle_t i2c_bus = NULL;
+    i2c_master_bus_config_t bus_config = {
+        .i2c_port = TOUCH_I2C_PORT,
         .sda_io_num = TOUCH_PIN_SDA,
         .scl_io_num = TOUCH_PIN_SCL,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 400000,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
     };
-    ESP_RETURN_ON_ERROR(i2c_param_config(TOUCH_I2C_PORT, &i2c_conf), TAG, "i2c cfg");
-    ESP_RETURN_ON_ERROR(i2c_driver_install(TOUCH_I2C_PORT, I2C_MODE_MASTER, 0, 0, 0), TAG, "i2c drv");
+    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_config, &i2c_bus), TAG, "i2c bus");
 
     esp_lcd_panel_io_handle_t touch_io = NULL;
     esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
     ESP_RETURN_ON_ERROR(
-        esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)TOUCH_I2C_PORT, &tp_io_config, &touch_io),
+        esp_lcd_new_panel_io_i2c(i2c_bus, &tp_io_config, &touch_io),
         TAG, "touch io"
     );
 
