@@ -242,8 +242,8 @@ Wszystkie taski rozpoczynają od `app_main()`. Kolejki to FreeRTOS `xQueueCreate
 2. Init TinyUSB CDC.
 3. Wystartuj 4 taski.
 4. Wystaw na ekran fullscreen "Hello, Deskstation. M0+M1."
-5. Push do TX queue: `{"v":1,"type":"hello","data":{"firmware_version":"0.1.0"}}`.
-6. Push do TX queue: `{"v":1,"type":"screen_changed","data":{"screen":"boot"}}` — sygnał że ESP→host kierunek działa.
+5. Push do TX queue: `{"v":1,"type":"hello","data":{"firmware_version":"0.1.0","free_heap":<int>,"psram_free":<int>}}` (heap/psram odczytane via `esp_get_free_heap_size()` / `heap_caps_get_free_size(MALLOC_CAP_SPIRAM)`).
+6. Push do TX queue: `{"v":1,"type":"screen_changed","data":{"screen":0,"via":"autoscroll"}}` — sygnał że ESP→host kierunek działa (`screen:0` = boot/initial; firmware używa `via:"autoscroll"` jako placeholder dla zdarzeń niespowodowanych użytkownikiem).
 7. Startuje wewnętrzny timer FreeRTOS — co 5 s push `heartbeat`, watch ostatni RX timestamp.
 
 ### Heartbeat firmware-side
