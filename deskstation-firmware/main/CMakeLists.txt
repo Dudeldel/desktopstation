@@ -5,8 +5,9 @@ idf_component_register(
         "usb_cdc.c"
         "protocol.c"
         "ui_state.c"
-        "ui/ui.c"
+        "ui/theme.c"
         "ui/toast.c"
+        "ui/ui.c"
     INCLUDE_DIRS
         "."
         "ui"
