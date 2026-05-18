@@ -1,6 +1,6 @@
 # Struktura projektu
 
-Dwa osobne repozytoria, niezależne lifecycle, niezależne wersjonowanie.
+Monorepo: jedno repo `github.com/Dudeldel/desktopstation` z dwoma subdir-ami `deskstation-daemon/` i `deskstation-firmware/` plus wspólnym `docs/` na top-level. Wcześniejsza decyzja "dwa osobne repo" odrzucona — atomiczność zmian protokołu (host i firmware muszą iść razem) ważniejsza niż niezależny lifecycle.
 
 ## `deskstation-daemon` (host, Python)
 
