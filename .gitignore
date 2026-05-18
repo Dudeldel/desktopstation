@@ -1,0 +1,25 @@
+# Daemon (Python)
+deskstation-daemon/.venv/
+deskstation-daemon/__pycache__/
+deskstation-daemon/**/__pycache__/
+deskstation-daemon/*.egg-info/
+deskstation-daemon/.pytest_cache/
+deskstation-daemon/.mypy_cache/
+deskstation-daemon/.ruff_cache/
+deskstation-daemon/config.yaml
+deskstation-daemon/.env
+
+# Firmware (ESP-IDF)
+deskstation-firmware/build/
+deskstation-firmware/sdkconfig
+deskstation-firmware/sdkconfig.old
+deskstation-firmware/managed_components/
+deskstation-firmware/dependencies.lock
+
+# Logs
+*.jsonl
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
