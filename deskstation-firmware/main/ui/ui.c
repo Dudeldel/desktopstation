@@ -64,9 +64,12 @@ esp_err_t ui_init(esp_lcd_panel_handle_t panel, esp_lcd_touch_handle_t touch)
 
     lv_init();
 
+    // calloc — uninitialized PSRAM is often all-1s (=white in RGB565). Without
+    // zeroing, any LVGL flush whose dirty region is smaller than the buffer
+    // leaves the unused portion of the buffer as white garbage.
     const size_t buf_pixels = 800 * 60;
-    lv_color_t *buf1 = heap_caps_malloc(buf_pixels * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    lv_color_t *buf2 = heap_caps_malloc(buf_pixels * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    lv_color_t *buf1 = heap_caps_calloc(buf_pixels, sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    lv_color_t *buf2 = heap_caps_calloc(buf_pixels, sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     lv_disp_draw_buf_init(&s_draw_buf, buf1, buf2, buf_pixels);
 
     lv_disp_drv_init(&s_disp_drv);
@@ -102,6 +105,12 @@ void ui_build_hello_screen(void)
 {
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    // Force LVGL to repaint the whole screen on first frame. Setting bg style
+    // alone does not invalidate the full screen rect, so any pixels not
+    // covered by a widget's dirty rect stay as whatever was in the buffer
+    // (i.e. white from uninitialized PSRAM).
+    lv_obj_invalidate(scr);
 
     lv_obj_t *label = lv_label_create(scr);
     lv_label_set_text(label, "Hello, Deskstation. M0+M1.");

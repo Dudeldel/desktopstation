@@ -1,7 +1,10 @@
 #include "board.h"
 
+#include <string.h>
+
 #include "driver/i2c_master.h"
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 #include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch_gt911.h"
 #include "esp_log.h"
@@ -78,6 +81,23 @@ static esp_err_t init_rgb_panel(esp_lcd_panel_handle_t *out_panel)
         TAG, "create RGB panel"
     );
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(*out_panel), TAG, "init panel");
+
+    // Clear both framebuffers via the panel driver's own write path. PSRAM
+    // starts uninitialized and LVGL only flushes dirty regions, so any area
+    // it never repaints would otherwise display whatever was already there.
+    // Going through draw_bitmap ensures DMA + cache sync are handled.
+    const size_t row_pixels = BOARD_LCD_WIDTH;
+    uint16_t *black_row = heap_caps_calloc(row_pixels, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+    if (black_row) {
+        // 2 flushes — one per framebuffer in num_fbs=2 setup.
+        for (int pass = 0; pass < 2; ++pass) {
+            for (int y = 0; y < BOARD_LCD_HEIGHT; ++y) {
+                esp_lcd_panel_draw_bitmap(*out_panel, 0, y, BOARD_LCD_WIDTH, y + 1, black_row);
+            }
+        }
+        heap_caps_free(black_row);
+    }
+
     ESP_LOGI(TAG, "RGB panel initialized: %dx%d", BOARD_LCD_WIDTH, BOARD_LCD_HEIGHT);
     return ESP_OK;
 }
