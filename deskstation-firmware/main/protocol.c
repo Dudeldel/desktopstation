@@ -17,6 +17,12 @@ static msg_type_t parse_type(const char *t)
     if (strcmp(t, "toast") == 0) return MSG_TOAST;
     if (strcmp(t, "ack") == 0) return MSG_ACK;
     if (strcmp(t, "screen_changed") == 0) return MSG_SCREEN_CHANGED;
+    if (strcmp(t, "top_bar") == 0) return MSG_TOP_BAR;
+    if (strcmp(t, "screen_1") == 0) return MSG_SCREEN_1;
+    if (strcmp(t, "screen_2") == 0) return MSG_SCREEN_2;
+    if (strcmp(t, "screen_3") == 0) return MSG_SCREEN_3;
+    if (strcmp(t, "screen_4") == 0) return MSG_SCREEN_4;
+    if (strcmp(t, "pomodoro_fullscreen") == 0) return MSG_POMODORO_FULLSCREEN;
     return MSG_UNKNOWN;
 }
 
@@ -57,6 +63,237 @@ bool protocol_parse(const char *line, parsed_msg_t *out)
         if (!cJSON_IsString(ref)) { ESP_LOGW(TAG, "ack missing ref"); goto done; }
         strncpy(out->data.ack.ref, ref->valuestring, sizeof(out->data.ack.ref) - 1);
         out->data.ack.ref[sizeof(out->data.ack.ref) - 1] = '\0';
+    } else if (out->type == MSG_TOP_BAR) {
+        cJSON *clock_j = cJSON_GetObjectItem(data, "clock");
+        cJSON *date_j = cJSON_GetObjectItem(data, "date");
+        cJSON *weather = cJSON_GetObjectItem(data, "weather");
+        cJSON *cu = cJSON_GetObjectItem(data, "claude_usage");
+        cJSON *pc = cJSON_GetObjectItem(data, "pomodoro_counter");
+        cJSON *mbl = cJSON_GetObjectItem(data, "macro_button_label");
+        if (!cJSON_IsString(clock_j) || !cJSON_IsString(date_j) || !cJSON_IsString(weather)
+                || !cJSON_IsString(cu) || !cJSON_IsNumber(pc)) {
+            ESP_LOGW(TAG, "top_bar missing fields");
+            goto done;
+        }
+        strncpy(out->data.top_bar.clock, clock_j->valuestring, sizeof(out->data.top_bar.clock) - 1);
+        out->data.top_bar.clock[sizeof(out->data.top_bar.clock) - 1] = '\0';
+        strncpy(out->data.top_bar.date, date_j->valuestring, sizeof(out->data.top_bar.date) - 1);
+        out->data.top_bar.date[sizeof(out->data.top_bar.date) - 1] = '\0';
+        strncpy(out->data.top_bar.weather, weather->valuestring, sizeof(out->data.top_bar.weather) - 1);
+        out->data.top_bar.weather[sizeof(out->data.top_bar.weather) - 1] = '\0';
+        strncpy(out->data.top_bar.claude_usage, cu->valuestring, sizeof(out->data.top_bar.claude_usage) - 1);
+        out->data.top_bar.claude_usage[sizeof(out->data.top_bar.claude_usage) - 1] = '\0';
+        out->data.top_bar.pomodoro_counter = pc->valueint;
+        const char *mbl_s = cJSON_IsString(mbl) ? mbl->valuestring : "MAKRO";
+        strncpy(out->data.top_bar.macro_button_label, mbl_s, sizeof(out->data.top_bar.macro_button_label) - 1);
+        out->data.top_bar.macro_button_label[sizeof(out->data.top_bar.macro_button_label) - 1] = '\0';
+    } else if (out->type == MSG_SCREEN_1) {
+        out->data.screen_1.today_count = 0;
+        out->data.screen_1.queued_count = 0;
+        memset(&out->data.screen_1.next_meeting, 0, sizeof(meeting_bar_t));
+
+        cJSON *today = cJSON_GetObjectItem(data, "today_tasks");
+        if (cJSON_IsArray(today)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, today) {
+                if (out->data.screen_1.today_count >= SCREEN1_TASKS_MAX) break;
+                cJSON *key_j = cJSON_GetObjectItem(item, "key");
+                cJSON *sum_j = cJSON_GetObjectItem(item, "summary");
+                cJSON *st_j  = cJSON_GetObjectItem(item, "status");
+                cJSON *cur_j = cJSON_GetObjectItem(item, "is_current");
+                if (!cJSON_IsString(key_j)) continue;
+                size_t i = out->data.screen_1.today_count++;
+                strncpy(out->data.screen_1.today_tasks[i].key, key_j->valuestring, JIRA_KEY_MAX - 1);
+                out->data.screen_1.today_tasks[i].key[JIRA_KEY_MAX - 1] = '\0';
+                if (cJSON_IsString(sum_j)) {
+                    strncpy(out->data.screen_1.today_tasks[i].summary, sum_j->valuestring, JIRA_SUMMARY_MAX - 1);
+                    out->data.screen_1.today_tasks[i].summary[JIRA_SUMMARY_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(st_j)) {
+                    strncpy(out->data.screen_1.today_tasks[i].status, st_j->valuestring, JIRA_STATUS_MAX - 1);
+                    out->data.screen_1.today_tasks[i].status[JIRA_STATUS_MAX - 1] = '\0';
+                }
+                out->data.screen_1.today_tasks[i].is_current = cJSON_IsTrue(cur_j);
+            }
+        }
+
+        cJSON *queued = cJSON_GetObjectItem(data, "queued_tasks");
+        if (cJSON_IsArray(queued)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, queued) {
+                if (out->data.screen_1.queued_count >= SCREEN1_TASKS_MAX) break;
+                cJSON *key_j = cJSON_GetObjectItem(item, "key");
+                cJSON *sum_j = cJSON_GetObjectItem(item, "summary");
+                cJSON *st_j  = cJSON_GetObjectItem(item, "status");
+                cJSON *cur_j = cJSON_GetObjectItem(item, "is_current");
+                if (!cJSON_IsString(key_j)) continue;
+                size_t i = out->data.screen_1.queued_count++;
+                strncpy(out->data.screen_1.queued_tasks[i].key, key_j->valuestring, JIRA_KEY_MAX - 1);
+                out->data.screen_1.queued_tasks[i].key[JIRA_KEY_MAX - 1] = '\0';
+                if (cJSON_IsString(sum_j)) {
+                    strncpy(out->data.screen_1.queued_tasks[i].summary, sum_j->valuestring, JIRA_SUMMARY_MAX - 1);
+                    out->data.screen_1.queued_tasks[i].summary[JIRA_SUMMARY_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(st_j)) {
+                    strncpy(out->data.screen_1.queued_tasks[i].status, st_j->valuestring, JIRA_STATUS_MAX - 1);
+                    out->data.screen_1.queued_tasks[i].status[JIRA_STATUS_MAX - 1] = '\0';
+                }
+                out->data.screen_1.queued_tasks[i].is_current = cJSON_IsTrue(cur_j);
+            }
+        }
+
+        cJSON *mtg = cJSON_GetObjectItem(data, "next_meeting");
+        if (cJSON_IsObject(mtg)) {
+            cJSON *title_j   = cJSON_GetObjectItem(mtg, "title");
+            cJSON *time_j    = cJSON_GetObjectItem(mtg, "time");
+            cJSON *url_j     = cJSON_GetObjectItem(mtg, "join_url");
+            cJSON *inmin_j   = cJSON_GetObjectItem(mtg, "in_minutes");
+            if (cJSON_IsString(title_j)) {
+                out->data.screen_1.next_meeting.present = true;
+                strncpy(out->data.screen_1.next_meeting.title, title_j->valuestring, MEETING_TITLE_MAX - 1);
+                out->data.screen_1.next_meeting.title[MEETING_TITLE_MAX - 1] = '\0';
+                if (cJSON_IsString(time_j)) {
+                    strncpy(out->data.screen_1.next_meeting.time, time_j->valuestring, MEETING_TIME_MAX - 1);
+                    out->data.screen_1.next_meeting.time[MEETING_TIME_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(url_j)) {
+                    strncpy(out->data.screen_1.next_meeting.join_url, url_j->valuestring, MEETING_URL_MAX - 1);
+                    out->data.screen_1.next_meeting.join_url[MEETING_URL_MAX - 1] = '\0';
+                }
+                if (cJSON_IsNumber(inmin_j)) {
+                    out->data.screen_1.next_meeting.in_minutes = inmin_j->valueint;
+                }
+            }
+        }
+    } else if (out->type == MSG_SCREEN_2) {
+        out->data.screen_2.count = 0;
+        cJSON *items = cJSON_GetObjectItem(data, "items");
+        if (cJSON_IsArray(items)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, items) {
+                if (out->data.screen_2.count >= SCREEN2_NOTIF_MAX) break;
+                cJSON *src_j  = cJSON_GetObjectItem(item, "source");
+                cJSON *snd_j  = cJSON_GetObjectItem(item, "sender");
+                cJSON *prv_j  = cJSON_GetObjectItem(item, "preview");
+                cJSON *ta_j   = cJSON_GetObjectItem(item, "time_ago");
+                cJSON *id_j   = cJSON_GetObjectItem(item, "id");
+                if (!cJSON_IsString(id_j)) continue;
+                size_t i = out->data.screen_2.count++;
+                strncpy(out->data.screen_2.items[i].id, id_j->valuestring, NOTIF_ID_MAX - 1);
+                out->data.screen_2.items[i].id[NOTIF_ID_MAX - 1] = '\0';
+                if (cJSON_IsString(src_j)) {
+                    strncpy(out->data.screen_2.items[i].source, src_j->valuestring, NOTIF_SOURCE_MAX - 1);
+                    out->data.screen_2.items[i].source[NOTIF_SOURCE_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(snd_j)) {
+                    strncpy(out->data.screen_2.items[i].sender, snd_j->valuestring, NOTIF_SENDER_MAX - 1);
+                    out->data.screen_2.items[i].sender[NOTIF_SENDER_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(prv_j)) {
+                    strncpy(out->data.screen_2.items[i].preview, prv_j->valuestring, NOTIF_PREVIEW_MAX - 1);
+                    out->data.screen_2.items[i].preview[NOTIF_PREVIEW_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(ta_j)) {
+                    strncpy(out->data.screen_2.items[i].time_ago, ta_j->valuestring, NOTIF_TIME_MAX - 1);
+                    out->data.screen_2.items[i].time_ago[NOTIF_TIME_MAX - 1] = '\0';
+                }
+            }
+        }
+    } else if (out->type == MSG_SCREEN_3) {
+        out->data.screen_3.pr_count = 0;
+        out->data.screen_3.standup_count = 0;
+
+        cJSON *prs = cJSON_GetObjectItem(data, "prs");
+        if (cJSON_IsArray(prs)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, prs) {
+                if (out->data.screen_3.pr_count >= SCREEN3_PR_MAX) break;
+                cJSON *id_j     = cJSON_GetObjectItem(item, "id");
+                cJSON *title_j  = cJSON_GetObjectItem(item, "title");
+                cJSON *author_j = cJSON_GetObjectItem(item, "author");
+                cJSON *repo_j   = cJSON_GetObjectItem(item, "repo");
+                cJSON *status_j = cJSON_GetObjectItem(item, "status");
+                cJSON *ci_j     = cJSON_GetObjectItem(item, "ci");
+                if (!cJSON_IsString(id_j)) continue;
+                size_t i = out->data.screen_3.pr_count++;
+                strncpy(out->data.screen_3.prs[i].id, id_j->valuestring, PR_ID_MAX - 1);
+                out->data.screen_3.prs[i].id[PR_ID_MAX - 1] = '\0';
+                if (cJSON_IsString(title_j)) {
+                    strncpy(out->data.screen_3.prs[i].title, title_j->valuestring, PR_TITLE_MAX - 1);
+                    out->data.screen_3.prs[i].title[PR_TITLE_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(author_j)) {
+                    strncpy(out->data.screen_3.prs[i].author, author_j->valuestring, PR_AUTHOR_MAX - 1);
+                    out->data.screen_3.prs[i].author[PR_AUTHOR_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(repo_j)) {
+                    strncpy(out->data.screen_3.prs[i].repo, repo_j->valuestring, PR_REPO_MAX - 1);
+                    out->data.screen_3.prs[i].repo[PR_REPO_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(status_j)) {
+                    strncpy(out->data.screen_3.prs[i].status, status_j->valuestring, PR_STATUS_MAX - 1);
+                    out->data.screen_3.prs[i].status[PR_STATUS_MAX - 1] = '\0';
+                }
+                if (cJSON_IsString(ci_j)) {
+                    strncpy(out->data.screen_3.prs[i].ci, ci_j->valuestring, PR_STATUS_MAX - 1);
+                    out->data.screen_3.prs[i].ci[PR_STATUS_MAX - 1] = '\0';
+                }
+            }
+        }
+
+        cJSON *standup = cJSON_GetObjectItem(data, "standup");
+        if (cJSON_IsArray(standup)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, standup) {
+                if (out->data.screen_3.standup_count >= SCREEN3_STANDUP_MAX) break;
+                cJSON *text_j = cJSON_GetObjectItem(item, "text");
+                cJSON *done_j = cJSON_GetObjectItem(item, "done");
+                if (!cJSON_IsString(text_j)) continue;
+                size_t i = out->data.screen_3.standup_count++;
+                strncpy(out->data.screen_3.standup[i].text, text_j->valuestring, STANDUP_TEXT_MAX - 1);
+                out->data.screen_3.standup[i].text[STANDUP_TEXT_MAX - 1] = '\0';
+                out->data.screen_3.standup[i].done = cJSON_IsTrue(done_j);
+            }
+        }
+    } else if (out->type == MSG_SCREEN_4) {
+        out->data.screen_4.count = 0;
+        cJSON *items = cJSON_GetObjectItem(data, "items");
+        if (cJSON_IsArray(items)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, items) {
+                if (out->data.screen_4.count >= SCREEN4_ITEM_MAX) break;
+                cJSON *id_j   = cJSON_GetObjectItem(item, "id");
+                cJSON *text_j = cJSON_GetObjectItem(item, "text");
+                cJSON *done_j = cJSON_GetObjectItem(item, "done");
+                if (!cJSON_IsString(id_j)) continue;
+                size_t i = out->data.screen_4.count++;
+                strncpy(out->data.screen_4.items[i].id, id_j->valuestring, TODO_ID_MAX - 1);
+                out->data.screen_4.items[i].id[TODO_ID_MAX - 1] = '\0';
+                if (cJSON_IsString(text_j)) {
+                    strncpy(out->data.screen_4.items[i].text, text_j->valuestring, TODO_TEXT_MAX - 1);
+                    out->data.screen_4.items[i].text[TODO_TEXT_MAX - 1] = '\0';
+                }
+                out->data.screen_4.items[i].done = cJSON_IsTrue(done_j);
+            }
+        }
+    } else if (out->type == MSG_POMODORO_FULLSCREEN) {
+        cJSON *visible_j  = cJSON_GetObjectItem(data, "visible");
+        cJSON *key_j      = cJSON_GetObjectItem(data, "task_key");
+        cJSON *elapsed_j  = cJSON_GetObjectItem(data, "elapsed_sec");
+        cJSON *total_j    = cJSON_GetObjectItem(data, "total_sec");
+        if (!cJSON_IsBool(visible_j)) {
+            ESP_LOGW(TAG, "pomodoro_fullscreen missing visible");
+            goto done;
+        }
+        out->data.pomo.visible = cJSON_IsTrue(visible_j);
+        if (cJSON_IsString(key_j)) {
+            strncpy(out->data.pomo.task_key, key_j->valuestring, JIRA_KEY_MAX - 1);
+            out->data.pomo.task_key[JIRA_KEY_MAX - 1] = '\0';
+        } else {
+            out->data.pomo.task_key[0] = '\0';
+        }
+        out->data.pomo.elapsed_sec = cJSON_IsNumber(elapsed_j) ? elapsed_j->valueint : 0;
+        out->data.pomo.total_sec   = cJSON_IsNumber(total_j)   ? total_j->valueint   : 0;
     }
 
     ok = true;
@@ -78,4 +315,46 @@ int protocol_serialize_hello(char *buf, size_t cap, const char *firmware_version
 int protocol_serialize_heartbeat(char *buf, size_t cap)
 {
     return snprintf(buf, cap, "{\"v\":1,\"type\":\"heartbeat\",\"data\":{}}");
+}
+
+int protocol_serialize_task_clicked(char *buf, size_t cap, const char *key)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"task_clicked\",\"data\":{\"key\":\"%s\"}}", key);
+}
+
+int protocol_serialize_pr_clicked(char *buf, size_t cap, const char *id)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"pr_clicked\",\"data\":{\"id\":\"%s\"}}", id);
+}
+
+int protocol_serialize_notification_clicked(char *buf, size_t cap, const char *id)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"notification_clicked\",\"data\":{\"id\":\"%s\"}}", id);
+}
+
+int protocol_serialize_todo_clicked(char *buf, size_t cap, const char *id)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"todo_clicked\",\"data\":{\"id\":\"%s\"}}", id);
+}
+
+int protocol_serialize_macro_trigger(char *buf, size_t cap, const char *name)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"macro_trigger\",\"data\":{\"name\":\"%s\"}}", name);
+}
+
+int protocol_serialize_pomodoro_action(char *buf, size_t cap, const char *action)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"pomodoro_action\",\"data\":{\"action\":\"%s\"}}", action);
+}
+
+int protocol_serialize_screen_changed_int(char *buf, size_t cap, int screen, const char *via)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"screen_changed\",\"data\":{\"screen\":%d,\"via\":\"%s\"}}", screen, via);
 }
