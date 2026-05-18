@@ -1,18 +1,26 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.10
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
-      - id: ruff-format
+        name: ruff (uv run ruff)
+        entry: uv run --project deskstation-daemon ruff check --fix
+        language: system
+        types: [python]
+        files: ^deskstation-daemon/
+        pass_filenames: true
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
+      - id: ruff-format
+        name: ruff-format (uv run ruff format)
+        entry: uv run --project deskstation-daemon ruff format
+        language: system
+        types: [python]
+        files: ^deskstation-daemon/
+        pass_filenames: true
+
       - id: mypy
+        name: mypy (uv run mypy --strict)
+        entry: bash -c 'cd deskstation-daemon && uv run mypy src/'
+        language: system
+        types: [python]
         files: ^deskstation-daemon/src/
-        additional_dependencies:
-          - pydantic>=2.5
-          - pydantic-settings>=2.0
-          - structlog>=24.0
-          - types-PyYAML
+        pass_filenames: false
