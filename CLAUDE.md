@@ -4,13 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-This repo currently contains **only specification and design documents** — no source code, build system, or tests exist yet. The `deskstation-daemon/` and `deskstation-firmware/` directories each hold `docs/` (plan, spec, designs) that describe what the two future codebases should look like; the `src/`, `main/`, `pyproject.toml`, `CMakeLists.txt`, etc. shown in `spec/03-project-structure.md` have **not been created**. Implementation is planned to start at milestone M0 in `deskstation-*/docs/plan/00-roadmap.md`.
+M0 + M1 complete: daemon scaffold (Python asyncio, uv, pytest, structlog) i firmware scaffold (ESP-IDF v5.3 + LVGL 8.x). Transport USB CDC działa z heartbeat / reconnect / 5 typami wiadomości.
 
-When asked to "build", "run tests", or "lint", first check whether the relevant subproject has been scaffolded — if not, the request needs to start with M0 setup, not with running a command.
+**Build / test / run commands:**
 
-The two `docs/` trees under `deskstation-daemon/` and `deskstation-firmware/` are currently **identical copies** of the same documentation set. Treat them as one source of truth — if you edit a spec, update both, or first ask the user whether the duplication should be resolved (e.g. moved to a shared top-level `docs/`).
+| Co | Komenda |
+|---|---|
+| Daemon tests | `cd deskstation-daemon && uv run pytest -v` |
+| Daemon mypy + ruff | `cd deskstation-daemon && uv run mypy src/ && uv run ruff check src/ tests/` |
+| Daemon run (live) | `cd deskstation-daemon && uv run deskstation` |
+| Daemon run (mock bridge) | `bridge.mode: mock` w `config.yaml`, potem `uv run deskstation` |
+| Firmware build | `cd deskstation-firmware && idf.py build` (po `. ~/esp/esp-idf/export.sh`) |
+| Firmware flash + monitor | `cd deskstation-firmware && bash tools/flash.sh /dev/ttyACM0` |
 
-The top-level `*.md` and `*.html` files (`00-roadmap.md`, `01-architecture.md`, `00-all-screens.html`, etc.) appear to be older flat copies of what is now organized under `deskstation-*/docs/`. Prefer the versioned copies under the subprojects.
+**Logs:** `~/.local/share/deskstation/logs/daemon.jsonl` (rotating, 10 MB × 3).
+
+The top-level `docs/` is the single source of truth for plan/spec/designs. Per-milestone specs and plans go to `docs/superpowers/{specs,plans}/`.
 
 ## System architecture
 
