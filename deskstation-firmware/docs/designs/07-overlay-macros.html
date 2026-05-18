@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Makra</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<h1>Overlay: Makra (grid 4×3)</h1>
+
+<div class="stage">
+
+  <!-- TOP BAR with macros button now active -->
+  <div class="top-bar">
+    <div class="tb-time-group"><span class="tb-time">14:23</span><span class="tb-date">pon, 18 maj</span></div>
+    <div class="tb-spacer"></div>
+    <div class="tb-section"><span class="ico">☁</span><span>18°</span></div>
+    <div class="tb-divider"></div>
+    <div class="tb-section">
+      <span class="ico" style="color:#7f77dd;">✨</span>
+      <span style="font-size:12px;">42%</span>
+      <div class="tb-bar"><div class="tb-bar-fill" style="width:42%;"></div></div>
+    </div>
+    <div class="tb-divider"></div>
+    <div class="tb-section"><span class="ico">🍅</span><span style="font-weight:500;">3</span></div>
+    <div class="tb-divider"></div>
+    <button style="background:#04342c; border:0.5px solid #1d9e75; color:#1d9e75; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; margin-left:8px; cursor:pointer;">
+      ✕ Zamknij
+    </button>
+  </div>
+
+  <!-- Header -->
+  <div style="padding:12px 16px 8px 16px; display:flex; align-items:center; justify-content:space-between;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:16px; color:#1d9e75;">⚡</span>
+      <span style="font-size:12px; color:#8a8a90; text-transform:uppercase; letter-spacing:0.5px;">Makra</span>
+      <span style="font-size:11px; color:#5f5e5a;">12 dostępnych</span>
+    </div>
+    <button style="background:transparent; border:0.5px solid #2a2a30; color:#8a8a90; padding:4px 10px; border-radius:6px; font-size:10px; cursor:pointer;">
+      + Dodaj
+    </button>
+  </div>
+
+  <!-- Grid 4x3 -->
+  <div style="padding:4px 16px 16px 16px; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(3,1fr); gap:10px; height:380px;">
+
+    <!-- 1 Start work -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(29,158,117,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#1d9e75;">▶</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Start work</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">IDE + Slack + Jira</span>
+    </button>
+
+    <!-- 2 Meeting -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(216,90,48,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#d85a30;">📹</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Meeting</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">Mute Spotify + OBS</span>
+    </button>
+
+    <!-- 3 Chrome tabs -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(55,138,221,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#378add;">🌐</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Chrome 6 tabs</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">Jira, Bitbucket...</span>
+    </button>
+
+    <!-- 4 End of day -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(127,119,221,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#7f77dd;">🌙</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">End of day</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">WIP commit + close</span>
+    </button>
+
+    <!-- 5 Pomodoro 25 -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(216,90,48,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px;">🍅</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Pomodoro 25</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">bez taska</span>
+    </button>
+
+    <!-- 6 Quick note -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(239,159,39,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#ef9f27;">✎</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Quick note</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">→ todo inbox</span>
+    </button>
+
+    <!-- 7 Toggle DnD -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(212,83,126,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#d4537e;">🔕</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Toggle DnD</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">Slack + system</span>
+    </button>
+
+    <!-- 8 Lock PC -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(99,153,34,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#97c459;">🔒</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Lock PC</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">krótka pauza</span>
+    </button>
+
+    <!-- 9 Coffee 5min -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(186,117,23,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#ba7517;">☕</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Coffee 5min</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">timer + status</span>
+    </button>
+
+    <!-- 10 Focus music -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(93,202,165,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#5dcaa5;">♪</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Focus music</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">Spotify playlist</span>
+    </button>
+
+    <!-- 11 Standup -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(127,119,221,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#7f77dd;">📊</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Standup</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">pokaż brief</span>
+    </button>
+
+    <!-- 12 Restart VPN -->
+    <button style="background:#16161a; border:0.5px solid #2a2a30; border-radius:8px; padding:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <div style="width:40px; height:40px; background:rgba(136,135,128,0.12); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#888780;">↻</div>
+      <span style="font-size:12px; color:#e8e8ea; font-weight:500;">Restart VPN</span>
+      <span style="font-size:9px; color:#5f5e5a; text-align:center;">wireguard</span>
+    </button>
+
+  </div>
+</div>
+
+<p class="caption">
+  4×3 grid (12 makr), każdy przycisk ~180×120px = bardzo komfortowy touch target.<br>
+  Komendy definiowane w <code>config.yaml</code> po stronie hosta.
+</p>
+
+</body>
+</html>

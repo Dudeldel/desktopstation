@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Ekran 4 — Todo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<h1>Ekran 4 — Todo z pliku ~/todo.md</h1>
+
+<div class="stage">
+
+  <div class="top-bar">
+    <div class="tb-time-group"><span class="tb-time">14:23</span><span class="tb-date">pon, 18 maj</span></div>
+    <div class="tb-spacer"></div>
+    <div class="tb-section"><span class="ico">☁</span><span>18°</span></div>
+    <div class="tb-divider"></div>
+    <div class="tb-section">
+      <span class="ico" style="color:#7f77dd;">✨</span>
+      <span style="font-size:12px;">42%</span>
+      <div class="tb-bar"><div class="tb-bar-fill" style="width:42%;"></div></div>
+    </div>
+    <div class="tb-divider"></div>
+    <div class="tb-section"><span class="ico">🍅</span><span style="font-weight:500;">3</span></div>
+    <div class="tb-divider"></div>
+    <button class="tb-macro-btn">⚡ MAKRO</button>
+  </div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot active"></div>
+  </div>
+
+  <div style="height:440px; padding:14px;">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="ico">☐</span>
+        <span style="font-size:12px; color:#8a8a90; text-transform:uppercase; letter-spacing:0.5px;">Todo</span>
+        <span style="font-size:11px; color:#c8c8cc;">3 / 9 done</span>
+        <div style="width:80px; height:4px; background:#2a2a30; border-radius:2px; overflow:hidden;">
+          <div style="width:33%; height:100%; background:#1d9e75;"></div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#8a8a90;">
+        <span class="ico">📄</span>
+        <span style="font-family:ui-monospace,monospace;">~/todo.md</span>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:4px;">
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; border-left:3px solid #e24b4a;">
+        <div style="width:22px; height:22px; border:1.5px solid #5f5e5a; border-radius:5px; flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#e8e8ea;">Wysłać raport kwartalny do księgowej</div>
+          <div style="display:flex; gap:8px; margin-top:2px; align-items:center;">
+            <span style="background:#501313; color:#f7c1c1; font-size:9px; padding:1px 6px; border-radius:3px; font-weight:500; text-transform:uppercase;">!high</span>
+            <span style="font-size:10px; color:#f09595;">⏰ dziś</span>
+            <span style="font-size:10px; color:#8a8a90;">#praca</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; border-left:3px solid #e24b4a;">
+        <div style="width:22px; height:22px; border:1.5px solid #5f5e5a; border-radius:5px; flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#e8e8ea;">Zamówić nowe okulary u optyka</div>
+          <div style="display:flex; gap:8px; margin-top:2px;">
+            <span style="background:#501313; color:#f7c1c1; font-size:9px; padding:1px 6px; border-radius:3px; font-weight:500; text-transform:uppercase;">!high</span>
+            <span style="font-size:10px; color:#8a8a90;">#zdrowie</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; border-left:3px solid #ef9f27;">
+        <div style="width:22px; height:22px; border:1.5px solid #5f5e5a; border-radius:5px; flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#e8e8ea;">Zarezerwować lot na wakacje</div>
+          <div style="display:flex; gap:8px; margin-top:2px;">
+            <span style="background:#633806; color:#fac775; font-size:9px; padding:1px 6px; border-radius:3px; font-weight:500; text-transform:uppercase;">!med</span>
+            <span style="font-size:10px; color:#8a8a90;">📅 20 maj</span>
+            <span style="font-size:10px; color:#8a8a90;">#urlop</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; border-left:3px solid #444441;">
+        <div style="width:22px; height:22px; border:1.5px solid #5f5e5a; border-radius:5px; flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#e8e8ea;">Zadzwonić do mamy</div>
+          <div style="display:flex; gap:8px; margin-top:2px;">
+            <span style="font-size:10px; color:#8a8a90;">#rodzina</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; border-left:3px solid #444441;">
+        <div style="width:22px; height:22px; border:1.5px solid #5f5e5a; border-radius:5px; flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#e8e8ea;">Wymienić olej w samochodzie</div>
+          <div style="display:flex; gap:8px; margin-top:2px;">
+            <span style="font-size:10px; color:#8a8a90;">#auto</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; border-left:3px solid #444441;">
+        <div style="width:22px; height:22px; border:1.5px solid #5f5e5a; border-radius:5px; flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#e8e8ea;">Kupić prezent na urodziny Ani</div>
+          <div style="display:flex; gap:8px; margin-top:2px;">
+            <span style="font-size:10px; color:#8a8a90;">📅 25 maj</span>
+            <span style="font-size:10px; color:#8a8a90;">#prezenty</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Done items -->
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; opacity:0.45;">
+        <div style="width:22px; height:22px; background:#1d9e75; border-radius:5px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#04342c; font-size:14px;">✓</div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#8a8a90; text-decoration:line-through;">Zarejestrować się na konferencję</div>
+        </div>
+      </div>
+
+      <div style="background:#16161a; padding:10px 12px; border-radius:8px; display:flex; align-items:center; gap:12px; min-height:44px; opacity:0.45;">
+        <div style="width:22px; height:22px; background:#1d9e75; border-radius:5px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#04342c; font-size:14px;">✓</div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#8a8a90; text-decoration:line-through;">Odpowiedzieć na maila o fakturze</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<p class="caption">
+  Format pliku: <code>- [ ] tekst !priority #tag @YYYY-MM-DD</code>. Tap checkbox = zapis do pliku.<br>
+  Kolorowa belka = priorytet (czerwony=high, pomarańczowy=med, szary=none).
+</p>
+
+</body>
+</html>

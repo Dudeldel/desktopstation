@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Ekran 1 — Jira</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<h1>Ekran 1 — Jira: moje taski + sprint projektu + nadchodzące meetings</h1>
+
+<div class="stage">
+
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="tb-time-group">
+      <span class="tb-time">14:23</span>
+      <span class="tb-date">pon, 18 maj</span>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-section"><span class="ico">☁</span><span>18°</span></div>
+    <div class="tb-divider"></div>
+    <div class="tb-section">
+      <span class="ico" style="color:#7f77dd;">✨</span>
+      <span style="font-size:12px;">42%</span>
+      <div class="tb-bar"><div class="tb-bar-fill" style="width:42%;"></div></div>
+    </div>
+    <div class="tb-divider"></div>
+    <div class="tb-section"><span class="ico">🍅</span><span style="font-weight:500;">3</span></div>
+    <div class="tb-divider"></div>
+    <button class="tb-macro-btn">⚡ MAKRO</button>
+  </div>
+
+  <div class="dots">
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <!-- LEFT: my tasks -->
+    <div class="column column-border" style="width: 400px;">
+      <div class="section-header">
+        <div class="section-label"><span class="ico">👤</span><span>Moje taski</span></div>
+        <span style="font-size:11px; color:#8a8a90;">7</span>
+      </div>
+
+      <div class="list">
+        <div class="task-card in-progress">
+          <div class="task-header">
+            <span class="task-key active">DEV-1234</span>
+            <span class="task-status">In progress</span>
+          </div>
+          <div class="task-summary">Refactor auth middleware</div>
+        </div>
+
+        <div class="task-card todo">
+          <div class="task-header">
+            <span class="task-key">PROJ-45</span>
+            <span class="task-status">To do</span>
+          </div>
+          <div class="task-summary">Setup CI for staging environment</div>
+        </div>
+
+        <div class="task-card draft">
+          <div class="task-header">
+            <span class="task-key">OPS-12</span>
+            <span class="task-status">Draft</span>
+          </div>
+          <div class="task-summary">Document deployment process</div>
+        </div>
+
+        <div class="task-card in-progress">
+          <div class="task-header">
+            <span class="task-key active">DEV-1240</span>
+            <span class="task-status">In progress</span>
+          </div>
+          <div class="task-summary">Fix race condition in queue worker</div>
+        </div>
+
+        <div class="task-card todo">
+          <div class="task-header">
+            <span class="task-key">DEV-1255</span>
+            <span class="task-status">To do</span>
+          </div>
+          <div class="task-summary">Migrate to new logging format</div>
+        </div>
+
+        <div class="task-card todo">
+          <div class="task-header">
+            <span class="task-key">PROJ-50</span>
+            <span class="task-status">To do</span>
+          </div>
+          <div class="task-summary">Review PR review comments</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: sprint -->
+    <div class="column" style="width: 400px;">
+      <div class="section-header">
+        <div class="section-label"><span class="ico">🎯</span><span>PROJ · Sprint 12</span></div>
+        <span style="font-size:11px; color:#f0997b;">4 dni</span>
+      </div>
+
+      <!-- Sprint progress + counters -->
+      <div style="background:#16161a; padding:10px; border-radius:8px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+          <span style="font-size:11px; color:#8a8a90;">12 / 30 pkt</span>
+          <span style="font-size:11px; color:#c8c8cc; font-weight:500;">40%</span>
+        </div>
+        <div style="height:4px; background:#2a2a30; border-radius:2px; overflow:hidden; margin-bottom:10px;">
+          <div style="width:40%; height:100%; background:#1d9e75;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <div style="text-align:center; flex:1;">
+            <div style="font-size:14px; font-weight:500; color:#c8c8cc;">8</div>
+            <div style="font-size:9px; color:#8a8a90; text-transform:uppercase;">Todo</div>
+          </div>
+          <div style="text-align:center; flex:1;">
+            <div style="font-size:14px; font-weight:500; color:#85b7eb;">5</div>
+            <div style="font-size:9px; color:#8a8a90; text-transform:uppercase;">In prog</div>
+          </div>
+          <div style="text-align:center; flex:1;">
+            <div style="font-size:14px; font-weight:500; color:#ef9f27;">2</div>
+            <div style="font-size:9px; color:#8a8a90; text-transform:uppercase;">Review</div>
+          </div>
+          <div style="text-align:center; flex:1;">
+            <div style="font-size:14px; font-weight:500; color:#1d9e75;">15</div>
+            <div style="font-size:9px; color:#8a8a90; text-transform:uppercase;">Done</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="list">
+        <div style="background:#16161a; padding:6px 10px; border-radius:6px; display:flex; align-items:center; gap:8px; min-height:36px;">
+          <span style="font-size:10px; color:#85b7eb; font-family:ui-monospace,monospace; font-weight:500; min-width:60px;">PROJ-41</span>
+          <span style="font-size:12px; color:#e8e8ea; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">User onboarding flow</span>
+          <div class="avatar avatar-green">AK</div>
+        </div>
+
+        <div style="background:#16161a; padding:6px 10px; border-radius:6px; display:flex; align-items:center; gap:8px; min-height:36px;">
+          <span style="font-size:10px; color:#85b7eb; font-family:ui-monospace,monospace; font-weight:500; min-width:60px;">PROJ-42</span>
+          <span style="font-size:12px; color:#e8e8ea; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Payment integration</span>
+          <div class="avatar avatar-purple">MJ</div>
+        </div>
+
+        <div style="background:#16161a; padding:6px 10px; border-radius:6px; display:flex; align-items:center; gap:8px; min-height:36px;">
+          <span style="font-size:10px; color:#85b7eb; font-family:ui-monospace,monospace; font-weight:500; min-width:60px;">PROJ-45</span>
+          <span style="font-size:12px; color:#e8e8ea; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Setup CI staging</span>
+          <div class="avatar avatar-coral">JA</div>
+        </div>
+
+        <div style="background:#16161a; padding:6px 10px; border-radius:6px; display:flex; align-items:center; gap:8px; min-height:36px;">
+          <span style="font-size:10px; color:#85b7eb; font-family:ui-monospace,monospace; font-weight:500; min-width:60px;">PROJ-47</span>
+          <span style="font-size:12px; color:#e8e8ea; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Mobile responsive fixes</span>
+          <div class="avatar avatar-green">AK</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEETINGS BAR — bottom overlay -->
+  <div style="position:absolute; bottom:0; left:0; right:0; height:80px; background:#16161a; border-top:0.5px solid #2a2a30; display:flex; align-items:center; padding:0 12px; gap:10px;">
+    <div style="font-size:10px; color:#8a8a90; text-transform:uppercase; letter-spacing:0.5px; min-width:70px;">Nadchodzące</div>
+
+    <div style="flex:1; background:#1a1a20; border:0.5px solid #ef9f27; border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:10px; height:56px;">
+      <div style="display:flex; flex-direction:column; min-width:50px;">
+        <span style="font-size:14px; font-weight:500; color:#ef9f27;">14:30</span>
+        <span style="font-size:10px; color:#8a8a90;">za 7 min</span>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12px; color:#e8e8ea; font-weight:500;">Team standup</div>
+        <div style="font-size:10px; color:#8a8a90;">30 min · 6 osób</div>
+      </div>
+      <button class="btn btn-primary"><span class="ico">📹</span> Dołącz</button>
+    </div>
+
+    <div style="flex:1; background:#1a1a20; border:0.5px solid #2a2a30; border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:10px; height:56px;">
+      <div style="display:flex; flex-direction:column; min-width:50px;">
+        <span style="font-size:14px; font-weight:500; color:#c8c8cc;">16:00</span>
+        <span style="font-size:10px; color:#8a8a90;">za 1h 37min</span>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12px; color:#e8e8ea; font-weight:500;">Sprint review</div>
+        <div style="font-size:10px; color:#8a8a90;">45 min · 12 osób</div>
+      </div>
+      <button class="btn btn-ghost"><span class="ico">⏱</span></button>
+    </div>
+  </div>
+
+</div>
+
+<p class="caption">
+  Klik w task lewej kolumny startuje pomodoro przypisany do tego taska.<br>
+  Imminent meeting (&lt; 15 min) ma pomarańczową obwódkę i aktywny przycisk dołączenia.
+</p>
+
+</body>
+</html>
