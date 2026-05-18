@@ -1,9 +1,8 @@
 #include "ui.h"
 #include "toast.h"
 
-#include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_rgb.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -18,15 +17,12 @@ static const char *TAG = "ui";
 
 static lv_disp_drv_t s_disp_drv;
 static lv_disp_draw_buf_t s_draw_buf;
-static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_touch_handle_t s_touch;
 
 static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {
-    esp_lcd_panel_draw_bitmap(s_panel,
-                              area->x1, area->y1,
-                              area->x2 + 1, area->y2 + 1,
-                              color_map);
+    (void)area;
+    (void)color_map;
     lv_disp_flush_ready(drv);
 }
 
@@ -59,24 +55,26 @@ static void lvgl_task(void *arg)
 
 esp_err_t ui_init(esp_lcd_panel_handle_t panel, esp_lcd_touch_handle_t touch)
 {
-    s_panel = panel;
     s_touch = touch;
 
     lv_init();
 
-    // calloc — uninitialized PSRAM is often all-1s (=white in RGB565). Without
-    // zeroing, any LVGL flush whose dirty region is smaller than the buffer
-    // leaves the unused portion of the buffer as white garbage.
-    const size_t buf_pixels = 800 * 60;
-    lv_color_t *buf1 = heap_caps_calloc(buf_pixels, sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    lv_color_t *buf2 = heap_caps_calloc(buf_pixels, sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
-    lv_disp_draw_buf_init(&s_draw_buf, buf1, buf2, buf_pixels);
+    // Use the panel's own framebuffers directly (direct mode). LVGL renders
+    // straight into the hardware back-buffer; the panel's continuous RGB scan
+    // displays it without an intermediate draw_bitmap copy. No tearing, no
+    // partial-flush white-bar artifacts.
+    void *fb0 = NULL;
+    void *fb1 = NULL;
+    esp_lcd_rgb_panel_get_frame_buffer(panel, 2, &fb0, &fb1);
+    lv_disp_draw_buf_init(&s_draw_buf, fb0, fb1, 800 * 480);
 
     lv_disp_drv_init(&s_disp_drv);
     s_disp_drv.hor_res = 800;
     s_disp_drv.ver_res = 480;
     s_disp_drv.flush_cb = flush_cb;
     s_disp_drv.draw_buf = &s_draw_buf;
+    s_disp_drv.direct_mode = 1;
+    s_disp_drv.full_refresh = 1;
     lv_disp_drv_register(&s_disp_drv);
 
     static lv_indev_drv_t indev_drv;
@@ -106,11 +104,6 @@ void ui_build_hello_screen(void)
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-    // Force LVGL to repaint the whole screen on first frame. Setting bg style
-    // alone does not invalidate the full screen rect, so any pixels not
-    // covered by a widget's dirty rect stay as whatever was in the buffer
-    // (i.e. white from uninitialized PSRAM).
-    lv_obj_invalidate(scr);
 
     lv_obj_t *label = lv_label_create(scr);
     lv_label_set_text(label, "Hello, Deskstation. M0+M1.");
