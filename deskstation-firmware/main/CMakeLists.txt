@@ -7,6 +7,7 @@ idf_component_register(
         "ui_state.c"
         "ui/theme.c"
         "ui/toast.c"
+        "ui/top_bar.c"
         "ui/ui.c"
     INCLUDE_DIRS
         "."
