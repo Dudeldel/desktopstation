@@ -2,6 +2,7 @@
 
 Uses pyserial-asyncio under the hood, but takes a `connection_factory` for testability.
 """
+
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -19,9 +20,9 @@ def default_serial_factory(device: str, baudrate: int) -> ConnectionFactory:
     import serial_asyncio  # type: ignore[import-untyped]
 
     async def factory() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        pair: tuple[asyncio.StreamReader, asyncio.StreamWriter] = (
-            await serial_asyncio.open_serial_connection(url=device, baudrate=baudrate)
-        )
+        pair: tuple[
+            asyncio.StreamReader, asyncio.StreamWriter
+        ] = await serial_asyncio.open_serial_connection(url=device, baudrate=baudrate)
         return pair
 
     return factory

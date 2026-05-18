@@ -1,4 +1,5 @@
 """Tests for SerialBridge with a fake stream pair."""
+
 import asyncio
 
 import pytest
@@ -72,7 +73,9 @@ async def test_send_writes_to_serial(bridge: SerialBridge, fake_pair: FakeStream
     await bridge.close()
 
 
-async def test_stream_yields_parsed_envelopes(bridge: SerialBridge, fake_pair: FakeStreamPair) -> None:
+async def test_stream_yields_parsed_envelopes(
+    bridge: SerialBridge, fake_pair: FakeStreamPair
+) -> None:
     await fake_pair.push_line(
         '{"v":1,"type":"hello","data":{"firmware_version":"0.1.0","free_heap":152340,"psram_free":8123456}}'
     )

@@ -2,6 +2,7 @@
 
 JSON output to file + (optionally) pretty console output for dev.
 """
+
 import logging
 import logging.handlers
 import sys
@@ -38,9 +39,7 @@ def configure_logging(
         file_handler = logging.handlers.RotatingFileHandler(
             log_file, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
         )
-        file_handler.setFormatter(
-            logging.Formatter(fmt="%(message)s")
-        )
+        file_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
         handlers.append(file_handler)
 
     # Console handler

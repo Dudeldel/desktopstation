@@ -1,4 +1,5 @@
 """Tests for heartbeat sender and connection monitor."""
+
 import asyncio
 
 from deskstation.bridge.heartbeat import ConnectionMonitor, heartbeat_sender
