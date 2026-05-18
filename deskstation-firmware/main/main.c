@@ -3,6 +3,8 @@
 #include "ui.h"
 #include "ui_state.h"
 #include "toast.h"
+#include "top_bar.h"
+#include "carousel.h"
 #include "usb_cdc.h"
 
 #include "esp_log.h"
@@ -68,6 +70,22 @@ static void ui_dispatch_task(void *arg)
             case MSG_HEARTBEAT:
                 ESP_LOGD(TAG, "heartbeat from host");
                 break;
+            case MSG_TOP_BAR:
+                top_bar_update(&msg.data.top_bar);
+                break;
+            case MSG_SCREEN_1:
+            case MSG_SCREEN_2:
+            case MSG_SCREEN_3:
+            case MSG_SCREEN_4:
+                // Phase C will route to per-screen renderers. For now we just log.
+                ESP_LOGD(TAG, "screen payload received type=%d", msg.type);
+                break;
+            case MSG_POMODORO_FULLSCREEN:
+                // Phase C will implement the overlay; meanwhile we pause/resume
+                // autoscroll based on visible flag.
+                if (msg.data.pomo.visible) carousel_autoscroll_pause();
+                else carousel_autoscroll_resume();
+                break;
             case MSG_HELLO:
             case MSG_SCREEN_CHANGED:
             case MSG_UNKNOWN:
@@ -106,7 +124,7 @@ void app_main(void)
     ESP_ERROR_CHECK(board_init(&panel, &touch));
     ESP_ERROR_CHECK(ui_init(panel, touch));
 
-    ui_build_hello_screen();
+    ui_build_main_screen();
 
     ESP_ERROR_CHECK(usb_cdc_init());
     ESP_ERROR_CHECK(usb_cdc_start_tasks());
