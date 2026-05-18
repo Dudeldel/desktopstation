@@ -1,7 +1,8 @@
 """Pydantic models for the serial protocol envelope (M1 subset).
 
 Only 5 message types are defined here: hello, heartbeat, toast, ack, screen_changed.
-Additional types arrive in later milestones (M2+) and bump up the per-type union.
+Field shapes match `docs/spec/02-serial-protocol.md` (lines 334-471) exactly.
+Additional types arrive in later milestones (M2+) and extend the per-type union.
 """
 
 import json
@@ -15,6 +16,8 @@ MAX_LINE_BYTES = 4096
 class HelloData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     firmware_version: str
+    free_heap: int
+    psram_free: int
 
 
 class HeartbeatData(BaseModel):
@@ -24,17 +27,18 @@ class HeartbeatData(BaseModel):
 class ToastData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str
-    level: Literal["info", "warn", "error"] = "info"
+    level: Literal["info", "warning", "error"] = "info"
 
 
 class AckData(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    ref: str
+    of_type: str
 
 
 class ScreenChangedData(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    screen: str
+    screen: int
+    via: Literal["swipe", "dot_click", "autoscroll"]
 
 
 class HelloMsg(BaseModel):

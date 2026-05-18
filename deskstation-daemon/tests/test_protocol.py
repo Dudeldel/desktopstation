@@ -4,10 +4,16 @@ import pytest
 from pydantic import ValidationError
 
 from deskstation.bridge.protocol import (
+    AckData,
     AckMsg,
+    Envelope,
+    HeartbeatData,
     HeartbeatMsg,
+    HelloData,
     HelloMsg,
+    ScreenChangedData,
     ScreenChangedMsg,
+    ToastData,
     ToastMsg,
     parse_envelope,
     serialize_envelope,
@@ -15,10 +21,15 @@ from deskstation.bridge.protocol import (
 
 
 def test_parse_hello() -> None:
-    line = '{"v":1,"type":"hello","data":{"firmware_version":"0.1.0"}}'
+    line = (
+        '{"v":1,"type":"hello",'
+        '"data":{"firmware_version":"0.1.0","free_heap":152340,"psram_free":8123456}}'
+    )
     env = parse_envelope(line)
     assert isinstance(env, HelloMsg)
     assert env.data.firmware_version == "0.1.0"
+    assert env.data.free_heap == 152340
+    assert env.data.psram_free == 8123456
 
 
 def test_parse_heartbeat() -> None:
@@ -28,11 +39,11 @@ def test_parse_heartbeat() -> None:
 
 
 def test_parse_toast() -> None:
-    line = '{"v":1,"type":"toast","data":{"text":"hi","level":"warn"}}'
+    line = '{"v":1,"type":"toast","data":{"text":"hi","level":"warning"}}'
     env = parse_envelope(line)
     assert isinstance(env, ToastMsg)
     assert env.data.text == "hi"
-    assert env.data.level == "warn"
+    assert env.data.level == "warning"
 
 
 def test_parse_toast_defaults_to_info() -> None:
@@ -43,27 +54,29 @@ def test_parse_toast_defaults_to_info() -> None:
 
 
 def test_parse_ack() -> None:
-    line = '{"v":1,"type":"ack","data":{"ref":"abc-123"}}'
+    line = '{"v":1,"type":"ack","data":{"of_type":"screen_1"}}'
     env = parse_envelope(line)
     assert isinstance(env, AckMsg)
-    assert env.data.ref == "abc-123"
+    assert env.data.of_type == "screen_1"
 
 
 def test_parse_screen_changed() -> None:
-    line = '{"v":1,"type":"screen_changed","data":{"screen":"boot"}}'
+    line = '{"v":1,"type":"screen_changed","data":{"screen":2,"via":"swipe"}}'
     env = parse_envelope(line)
     assert isinstance(env, ScreenChangedMsg)
-    assert env.data.screen == "boot"
+    assert env.data.screen == 2
+    assert env.data.via == "swipe"
 
 
 def test_serialize_roundtrip() -> None:
-    for env in [
-        HelloMsg(data={"firmware_version": "0.1.0"}),
-        HeartbeatMsg(data={}),
-        ToastMsg(data={"text": "hello", "level": "error"}),
-        AckMsg(data={"ref": "x"}),
-        ScreenChangedMsg(data={"screen": "boot"}),
-    ]:
+    envelopes: list[Envelope] = [
+        HelloMsg(data=HelloData(firmware_version="0.1.0", free_heap=152340, psram_free=8123456)),
+        HeartbeatMsg(data=HeartbeatData()),
+        ToastMsg(data=ToastData(text="hello", level="error")),
+        AckMsg(data=AckData(of_type="screen_1")),
+        ScreenChangedMsg(data=ScreenChangedData(screen=2, via="dot_click")),
+    ]
+    for env in envelopes:
         line = serialize_envelope(env)
         assert not line.endswith("\n")  # serialize does not include newline
         parsed = parse_envelope(line)
@@ -97,6 +110,19 @@ def test_parse_rejects_missing_data_field() -> None:
 
 def test_parse_rejects_extra_fields_in_data() -> None:
     line = '{"v":1,"type":"heartbeat","data":{"surprise":"value"}}'
+    with pytest.raises(ValidationError):
+        parse_envelope(line)
+
+
+def test_parse_rejects_invalid_toast_level() -> None:
+    # "warn" is not valid — spec/02 uses "warning"
+    line = '{"v":1,"type":"toast","data":{"text":"hi","level":"warn"}}'
+    with pytest.raises(ValidationError):
+        parse_envelope(line)
+
+
+def test_parse_rejects_invalid_screen_changed_via() -> None:
+    line = '{"v":1,"type":"screen_changed","data":{"screen":2,"via":"teleport"}}'
     with pytest.raises(ValidationError):
         parse_envelope(line)
 

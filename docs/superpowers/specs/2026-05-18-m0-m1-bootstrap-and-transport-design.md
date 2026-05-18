@@ -272,10 +272,12 @@ Carousel, 4 ekrany, top bar, touch event handlers, autoscroll, fonty z polskimi 
 | Kierunek | Typ | Cel | Payload |
 |---|---|---|---|
 | obie strony | `heartbeat` | keepalive, 5s interval | `{}` |
-| host → ESP | `toast` | krótkie powiadomienie u góry | `{"text": "string", "level": "info|warn|error"}` |
-| ESP → host | `ack` | (opcjonalne) ESP potwierdza odebraną wiadomość od hosta — w M1 użyteczne dla `toast`, dla debug | `{"ref": "msg_id"}` |
-| ESP → host | `hello` | po starcie / reconnect | `{"firmware_version": "0.1.0"}` |
-| ESP → host | `screen_changed` | (testowe w M1) potwierdza ESP→host | `{"screen": "boot"}` |
+| host → ESP | `toast` | krótkie powiadomienie u góry | `{"text": "string", "level": "info\|warning\|error"}` |
+| ESP → host | `ack` | (opcjonalne) ESP potwierdza odebraną wiadomość od hosta — w M1 użyteczne dla `toast`, dla debug | `{"of_type": "screen_1"}` |
+| ESP → host | `hello` | po starcie / reconnect | `{"firmware_version": "0.1.0", "free_heap": 152340, "psram_free": 8123456}` |
+| ESP → host | `screen_changed` | (testowe w M1) potwierdza ESP→host | `{"screen": 2, "via": "swipe\|dot_click\|autoscroll"}` |
+
+Pola dokładnie odpowiadają `docs/spec/02-serial-protocol.md` (linie 334–471). Żadne pola nie są deferred — bierzemy pełne shape z spec/02.
 
 **Uwaga o `ack`:** typ obsługiwany w protokole na obu końcach (model pydantic + handler firmware-side), ale wysyłka jest opcjonalna. W M1 firmware **nie musi** wysyłać ack na każdy toast — wystarczy że protokół to obsługuje gdyby kiedyś przyszedł. Daemon dostaje ack, loguje, nic z nim nie robi.
 
@@ -291,20 +293,27 @@ Newline-delimited JSON, UTF-8. Jedna wiadomość = jedna linia zakończona `\n`.
 
 ```python
 class HelloData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     firmware_version: str
+    free_heap: int
+    psram_free: int
 
 class HeartbeatData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 class ToastData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     text: str
-    level: Literal["info", "warn", "error"] = "info"
+    level: Literal["info", "warning", "error"] = "info"
 
 class AckData(BaseModel):
-    ref: str
+    model_config = ConfigDict(extra="forbid")
+    of_type: str
 
 class ScreenChangedData(BaseModel):
-    screen: str
+    model_config = ConfigDict(extra="forbid")
+    screen: int
+    via: Literal["swipe", "dot_click", "autoscroll"]
 
 class Envelope(BaseModel):
     v: Literal[1] = 1
