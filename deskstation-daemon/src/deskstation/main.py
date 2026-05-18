@@ -1,0 +1,87 @@
+"""Asyncio entry point: wires bridge, heartbeat, message dispatch."""
+import asyncio
+import signal
+
+import structlog
+
+from deskstation.bridge.heartbeat import ConnectionMonitor, heartbeat_sender
+from deskstation.bridge.interface import BridgeProtocol
+from deskstation.bridge.mock_bridge import MockBridge
+from deskstation.bridge.protocol import (
+    AckMsg,
+    HeartbeatMsg,
+    HelloMsg,
+    ScreenChangedMsg,
+    ToastMsg,
+)
+from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
+from deskstation.config import Config, load_config
+from deskstation.logging_setup import configure_logging
+
+log = structlog.get_logger(__name__)
+
+
+def _build_bridge(cfg: Config) -> BridgeProtocol:
+    if cfg.bridge.mode == "mock":
+        log.info("bridge_mode_mock")
+        return MockBridge()
+    factory = default_serial_factory(cfg.serial.device, cfg.serial.baudrate)
+    return SerialBridge(factory, reconnect_interval_sec=cfg.serial.reconnect_interval_sec)
+
+
+async def _dispatch(bridge: BridgeProtocol, monitor: ConnectionMonitor) -> None:
+    async for env in bridge.stream():
+        monitor.mark_rx()
+        if isinstance(env, HelloMsg):
+            log.info("hello_received", firmware_version=env.data.firmware_version)
+        elif isinstance(env, HeartbeatMsg):
+            log.debug("heartbeat_received")
+        elif isinstance(env, ScreenChangedMsg):
+            log.info("screen_changed_received", screen=env.data.screen)
+        elif isinstance(env, AckMsg):
+            log.debug("ack_received", of_type=env.data.of_type)
+        elif isinstance(env, ToastMsg):
+            log.warning("toast_from_esp_ignored", text=env.data.text)
+        else:
+            log.warning("unknown_envelope_type")
+
+
+async def _run() -> None:
+    cfg = load_config()
+    configure_logging(
+        log_file=cfg.logging.file,
+        pretty_console=cfg.logging.pretty_console,
+        level=cfg.logging.level,
+    )
+    log.info("ready", serial_device=cfg.serial.device, bridge_mode=cfg.bridge.mode)
+
+    bridge = _build_bridge(cfg)
+    monitor = ConnectionMonitor(timeout_sec=cfg.heartbeat.timeout_sec)
+
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop_event.set)
+
+    tasks = [
+        asyncio.create_task(heartbeat_sender(bridge, interval_sec=cfg.heartbeat.interval_sec)),
+        asyncio.create_task(_dispatch(bridge, monitor)),
+        asyncio.create_task(monitor.watchdog()),
+    ]
+
+    await stop_event.wait()
+    log.info("shutting_down")
+
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await bridge.close()
+    log.info("shutdown_complete")
+
+
+def main() -> None:
+    asyncio.run(_run())
+
+
+if __name__ == "__main__":
+    main()
