@@ -48,3 +48,35 @@ ESP32 jest "głupim terminalem" — renderuje UI w LVGL, wysyła zdarzenia użyt
 - LVGL 8.x
 - Waveshare BSP dla tej płytki
 - USB CDC ACM (TinyUSB)
+
+## Quick start
+
+Monorepo z dwoma subprojektami. Każdy ma własny setup.
+
+### Daemon (host, Python)
+
+Wymaga `uv` ([install guide](https://docs.astral.sh/uv/getting-started/installation/)) i Python 3.11+.
+
+```bash
+cd deskstation-daemon
+uv sync --all-extras
+cp config.yaml.example config.yaml         # edytuj jeśli chcesz
+uv run deskstation                          # startuje daemon
+uv run pytest                               # testy
+```
+
+### Firmware (ESP32-S3)
+
+Wymaga Linuxa.
+
+```bash
+cd deskstation-firmware
+bash tools/install_esp_idf.sh               # one-shot, ~15 min
+. ~/esp/esp-idf/export.sh                   # aktywuje ESP-IDF
+idf.py set-target esp32s3
+bash tools/flash.sh /dev/ttyACM0            # build + flash + monitor
+```
+
+## Status
+
+M0 + M1 done: bootstrap + niezawodny transport USB CDC z heartbeat + reconnect + 5 typami wiadomości (hello/heartbeat/toast/ack/screen_changed). UI to placeholder. Pełen plan w `docs/plan/00-roadmap.md`.
