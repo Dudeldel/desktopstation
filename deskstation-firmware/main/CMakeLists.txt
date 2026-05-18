@@ -1,0 +1,21 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "board.c"
+        "usb_cdc.c"
+        "protocol.c"
+        "ui_state.c"
+        "ui/ui.c"
+        "ui/toast.c"
+    INCLUDE_DIRS
+        "."
+        "ui"
+    REQUIRES
+        json
+        esp_lcd
+        esp_lcd_touch_gt911
+        esp_tinyusb
+        lvgl
+        driver
+        nvs_flash
+)
