@@ -18,6 +18,8 @@ from deskstation.bridge.protocol import (
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
 from deskstation.config import Config, load_config
 from deskstation.logging_setup import configure_logging
+from deskstation.pollers.mock import start_all_mocks
+from deskstation.ui_state import UIState
 
 log = structlog.get_logger(__name__)
 
@@ -30,9 +32,14 @@ def _build_bridge(cfg: Config) -> BridgeProtocol:
     return SerialBridge(factory, reconnect_interval_sec=cfg.serial.reconnect_interval_sec)
 
 
-async def _dispatch(bridge: BridgeProtocol, monitor: ConnectionMonitor) -> None:
+async def _dispatch(bridge: BridgeProtocol, monitor: ConnectionMonitor, ui_state: UIState) -> None:
+    was_connected = monitor.is_connected
     async for env in bridge.stream():
         monitor.mark_rx()
+        if not was_connected:
+            log.info("reconnect_resending_ui_state")
+            await ui_state.resend_all()
+        was_connected = monitor.is_connected
         if isinstance(env, HelloMsg):
             log.info("hello_received", firmware_version=env.data.firmware_version)
         elif isinstance(env, HeartbeatMsg):
@@ -58,6 +65,12 @@ async def _run() -> None:
 
     bridge = _build_bridge(cfg)
     monitor = ConnectionMonitor(timeout_sec=cfg.heartbeat.timeout_sec)
+    ui_state = UIState(bridge)
+
+    mock_tasks: list[asyncio.Task[None]] = []
+    if cfg.mock.enabled:
+        log.info("starting_mock_pollers", interval_sec=cfg.mock.interval_sec)
+        mock_tasks = start_all_mocks(ui_state, interval_sec=cfg.mock.interval_sec)
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -66,8 +79,9 @@ async def _run() -> None:
 
     tasks = [
         asyncio.create_task(heartbeat_sender(bridge, interval_sec=cfg.heartbeat.interval_sec)),
-        asyncio.create_task(_dispatch(bridge, monitor)),
+        asyncio.create_task(_dispatch(bridge, monitor, ui_state)),
         asyncio.create_task(monitor.watchdog()),
+        *mock_tasks,
     ]
 
     await stop_event.wait()

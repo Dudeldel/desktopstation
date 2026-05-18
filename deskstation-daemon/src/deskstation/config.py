@@ -32,12 +32,19 @@ class LoggingConfig(BaseModel):
     pretty_console: bool = False
 
 
+class MockConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    interval_sec: float = 5.0
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
     bridge: BridgeConfig = Field(default_factory=BridgeConfig)
     heartbeat: HeartbeatConfig = Field(default_factory=HeartbeatConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    mock: MockConfig = Field(default_factory=MockConfig)
 
 
 def load_config(path: Path | None = None) -> Config:

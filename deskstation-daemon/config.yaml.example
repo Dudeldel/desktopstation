@@ -16,3 +16,8 @@ logging:
   level: INFO
   file: ~/.local/share/deskstation/logs/daemon.jsonl
   pretty_console: false
+
+# Uncomment to enable mock pollers (useful for dev/UI testing without hardware):
+# mock:
+#   enabled: true
+#   interval_sec: 5.0
