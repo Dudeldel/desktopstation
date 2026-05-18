@@ -55,17 +55,23 @@ static esp_err_t init_rgb_panel(esp_lcd_panel_handle_t *out_panel)
             LCD_PIN_G0, LCD_PIN_G1, LCD_PIN_G2, LCD_PIN_G3, LCD_PIN_G4, LCD_PIN_G5,
             LCD_PIN_R0, LCD_PIN_R1, LCD_PIN_R2, LCD_PIN_R3, LCD_PIN_R4,
         },
+        // Timings verified 24h-stable on Waveshare ESP32-S3-Touch-LCD-7 800x480
+        // via lvgl-micropython #333. ≤12.8 MHz blanks the panel; ≥13.0 MHz drifts;
+        // 12.9 MHz is the sweet spot. Residual touch-triggered horizontal shift
+        // remains — root cause is the LVGL flush_cb using esp_lcd_panel_draw_bitmap
+        // (partial writes into a scanning RGB framebuffer cause tearing). M2 will
+        // switch LVGL to direct-mode rendering against the panel's framebuffer.
         .timings = {
-            .pclk_hz = 16 * 1000 * 1000,
+            .pclk_hz = 12900000,
             .h_res = BOARD_LCD_WIDTH,
             .v_res = BOARD_LCD_HEIGHT,
-            .hsync_pulse_width = 4,
-            .hsync_back_porch = 8,
-            .hsync_front_porch = 8,
-            .vsync_pulse_width = 4,
-            .vsync_back_porch = 8,
-            .vsync_front_porch = 8,
-            .flags.pclk_active_neg = 1,
+            .hsync_pulse_width = 2,
+            .hsync_back_porch = 4,
+            .hsync_front_porch = 4,
+            .vsync_pulse_width = 2,
+            .vsync_back_porch = 4,
+            .vsync_front_porch = 4,
+            .flags.pclk_active_neg = 0,
         },
         .flags.fb_in_psram = 1,
     };
