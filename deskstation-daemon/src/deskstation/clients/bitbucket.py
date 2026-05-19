@@ -89,6 +89,9 @@ def _parse_pr_item(item: dict[str, Any], kind: Literal["mine", "review"], now: d
         dest_branch=item["destination"]["branch"]["name"],
         age_hours=_parse_created_age_hours(item["created_on"], now),
         approvals=approvals,
+        # Bitbucket doesn't expose required-approvals on the listing endpoint without an
+        # extra branch-restrictions call. Set to 0 for M4 and revisit when the poller
+        # (or a future ready-to-merge signal) actually needs it.
         approvals_required=0,
         kind=kind,
     )
@@ -186,7 +189,7 @@ class BitbucketClient:
             url = f"{self._base_url}/2.0/repositories/{self._workspace}/{repo}/pullrequests"
             q_value = f'reviewers.username="{username}" AND state="OPEN"'
             params: dict[str, Any] = {"q": q_value, "pagelen": 50}
-            cache_key = f"bitbucket:review_prs:{username}:{repo}"
+            cache_key = f"bitbucket:review_prs:{self._workspace}:{username}:{repo}"
 
             try:
                 response = await self._http.get(url, params=params, auth=self._auth)
@@ -258,7 +261,7 @@ class BitbucketClient:
             "pagelen": 1,
             "target.branch": branch,
         }
-        cache_key = f"bitbucket:pipeline:{repo}:{branch}"
+        cache_key = f"bitbucket:pipeline:{self._workspace}:{repo}:{branch}"
 
         try:
             response = await self._http.get(url, params=params, auth=self._auth)
