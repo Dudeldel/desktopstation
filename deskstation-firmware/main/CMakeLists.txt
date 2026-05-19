@@ -17,6 +17,10 @@ idf_component_register(
         "ui/toast.c"
         "ui/top_bar.c"
         "ui/ui.c"
+        "ui/fonts/lv_font_pl_14.c"
+        "ui/fonts/lv_font_pl_16.c"
+        "ui/fonts/lv_font_pl_20.c"
+        "ui/fonts/lv_font_pl_28.c"
     INCLUDE_DIRS
         "."
         "ui"
