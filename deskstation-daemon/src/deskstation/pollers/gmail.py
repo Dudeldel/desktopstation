@@ -30,6 +30,7 @@ from deskstation.clients.gmail import (
 from deskstation.pollers.mock import MockPoller
 
 if TYPE_CHECKING:
+    from deskstation.engines.screen2_merger import Screen2Merger
     from deskstation.ui_state import UIState
 
 log = structlog.get_logger(__name__)
@@ -56,9 +57,11 @@ class GmailPoller(MockPoller):
         ui_state: UIState,
         client: GmailClient,
         interval_sec: float = 60.0,
+        merger: Screen2Merger | None = None,
     ) -> None:
         super().__init__(ui_state, interval_sec)
         self._client = client
+        self._merger = merger
         self._auth_failed = False
         self._latest: list[Notification] = []
 
@@ -90,10 +93,15 @@ class GmailPoller(MockPoller):
             )
             for m in messages
         ]
-        # M5.5 (Screen2Merger) will replace this direct push with a merge of
-        # gmail+chat+dbus sources via `self.latest_notifications()`. For M5.2
-        # standalone the poller is the only source on screen_2.
-        self.ui_state.set_screen_2(notifications=list(self._latest))
+        # M5.5: when a Screen2Merger is wired in (production main.py),
+        # route through it so gmail+chat+dbus get merged rather than
+        # clobbering one another. When no merger is supplied (standalone
+        # tests, manual experiments), keep the direct push so the poller
+        # is still usable on its own.
+        if self._merger is not None:
+            self._merger.update("gmail", list(self._latest))
+        else:
+            self.ui_state.set_screen_2(notifications=list(self._latest))
 
     def latest_notifications(self) -> list[Notification]:
         return list(self._latest)

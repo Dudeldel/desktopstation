@@ -27,6 +27,7 @@ from deskstation.clients.gmail import GmailClient
 from deskstation.clients.jira import JiraClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
+from deskstation.engines.screen2_merger import Screen2Merger
 from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
@@ -179,6 +180,12 @@ async def _run() -> None:
     if cfg.gmail.enabled or cfg.gchat.enabled:
         google_creds = auth_google.load_credentials()
 
+    # M5.5: single owner of the ``screen_2`` dispatch. Constructed before
+    # the Gmail / Chat pollers and the dbus listener so they can route
+    # their notifications through it instead of calling
+    # ``ui_state.set_screen_2`` directly.
+    screen2_merger = Screen2Merger(ui_state)
+
     gmail_poller: GmailPoller | None = None
     if google_creds is not None and cfg.gmail.enabled:
         gmail_client = GmailClient(google_creds, cache)
@@ -186,6 +193,7 @@ async def _run() -> None:
             ui_state,
             gmail_client,
             interval_sec=cfg.gmail.poll_interval_sec,
+            merger=screen2_merger,
         )
 
     gchat_poller: GoogleChatPoller | None = None
@@ -200,6 +208,7 @@ async def _run() -> None:
             gchat_client,
             my_email=cfg.gchat.my_email,
             interval_sec=cfg.gchat.poll_interval_sec,
+            merger=screen2_merger,
         )
     dbus_listener: DbusNotificationListener | None = None
     if cfg.dbus.enabled:
@@ -214,12 +223,16 @@ async def _run() -> None:
             log.warning("dbus_listener_unavailable", error=str(exc))
             dbus_listener = None
 
-    # TODO(M5.5): Screen2Merger will replace direct ``set_screen_2`` calls
-    # from Gmail / Chat / dbus listener. Today Gmail and Chat both write
-    # screen_2 independently — last writer wins, which is a temporary
-    # known issue. M5.5 introduces an aggregator that merges
-    # ``latest_notifications()`` (and the dbus listener's ``snapshot()``)
-    # from each source.
+    # M5.5: dbus is signal-driven (no tick loop), so to feed its buffered
+    # notifications into the merger we run a tiny 1 Hz polling task that
+    # reads ``snapshot()`` and pushes it. A snapshot is a small in-memory
+    # deque copy — negligible cost. A proper callback-driven path can come
+    # later if 1 Hz proves too coarse.
+    async def _dbus_to_merger() -> None:
+        while True:
+            if dbus_listener is not None:
+                screen2_merger.update("dbus", dbus_listener.snapshot())
+            await asyncio.sleep(1.0)
 
     pomodoro = PomodoroEngine(
         ui_state,
@@ -273,6 +286,8 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(gmail_poller.run_forever()))
     if gchat_poller is not None:
         tasks.append(asyncio.create_task(gchat_poller.run_forever()))
+    if dbus_listener is not None:
+        tasks.append(asyncio.create_task(_dbus_to_merger()))
 
     await stop_event.wait()
     log.info("shutting_down")

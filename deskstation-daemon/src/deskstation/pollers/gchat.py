@@ -43,6 +43,7 @@ from deskstation.pollers.mock import MockPoller
 # module once dbus / calendar pollers land in M5.4 / M5.6.
 
 if TYPE_CHECKING:
+    from deskstation.engines.screen2_merger import Screen2Merger
     from deskstation.ui_state import UIState
 
 log = structlog.get_logger(__name__)
@@ -55,10 +56,12 @@ class GoogleChatPoller(MockPoller):
         client: GoogleChatClient,
         my_email: str,
         interval_sec: float = 60.0,
+        merger: Screen2Merger | None = None,
     ) -> None:
         super().__init__(ui_state, interval_sec)
         self._client = client
         self._my_email = my_email
+        self._merger = merger
         self._auth_failed = False
         self._latest: list[Notification] = []
         # Start the window one hour back so the very first tick has a
@@ -126,11 +129,15 @@ class GoogleChatPoller(MockPoller):
                 )
 
         self._latest = notifications
-        # M5.5 (Screen2Merger) will replace this direct push with a merge
-        # of gmail+chat+dbus sources via ``self.latest_notifications()``.
-        # For M5.3 standalone the poller is one of (potentially) several
-        # sources writing to screen_2 — see TODO in main.py.
-        self.ui_state.set_screen_2(notifications=list(self._latest))
+        # M5.5: when a Screen2Merger is wired in (production main.py),
+        # route through it so gmail+chat+dbus get merged rather than
+        # clobbering one another. When no merger is supplied (standalone
+        # tests, manual experiments), keep the direct push so the poller
+        # is still usable on its own.
+        if self._merger is not None:
+            self._merger.update("gchat", list(self._latest))
+        else:
+            self.ui_state.set_screen_2(notifications=list(self._latest))
 
         # Only advance the window once a full pass has been collected.
         self._last_check = datetime.now(UTC)
