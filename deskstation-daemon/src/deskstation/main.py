@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+from pathlib import Path
 
 import structlog
 
@@ -92,6 +93,19 @@ async def _dispatch(
             log.warning("unknown_envelope_type")
 
 
+def _check_google_oauth_setup() -> None:
+    """Log a hint if a Google OAuth client is configured but no token exists yet.
+
+    Silent when both files are missing (user likely doesn't want Google
+    integration); silent when token exists (happy path).
+    """
+    config_dir = Path("~/.config/deskstation").expanduser()
+    client_path = config_dir / "google_client.json"
+    token_path = config_dir / "google_token.json"
+    if client_path.exists() and not token_path.exists():
+        log.info("google_oauth_not_configured", hint="run `deskstation auth-google`")
+
+
 async def _run() -> None:
     cfg = load_config()
     configure_logging(
@@ -100,6 +114,7 @@ async def _run() -> None:
         level=cfg.logging.level,
     )
     log.info("ready", serial_device=cfg.serial.device, bridge_mode=cfg.bridge.mode)
+    _check_google_oauth_setup()
 
     bridge = _build_bridge(cfg)
     monitor = ConnectionMonitor(timeout_sec=cfg.heartbeat.timeout_sec)
