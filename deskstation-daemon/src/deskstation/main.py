@@ -19,10 +19,12 @@ from deskstation.bridge.protocol import (
     ToastMsg,
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
+from deskstation.clients.bitbucket import BitbucketClient
 from deskstation.clients.jira import JiraClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.logging_setup import configure_logging
+from deskstation.pollers.bitbucket import BitbucketPoller
 from deskstation.pollers.jira import JiraPoller
 from deskstation.pollers.mock import start_all_mocks
 from deskstation.secrets import load_secrets
@@ -123,6 +125,31 @@ async def _run() -> None:
             interval_sec=cfg.jira.poll_interval_sec,
         )
 
+    bitbucket_client: BitbucketClient | None = None
+    bitbucket_poller: BitbucketPoller | None = None
+    if (
+        secrets.bitbucket is not None
+        and cfg.bitbucket.enabled
+        and cfg.bitbucket.workspace
+        and cfg.bitbucket.repos
+    ):
+        bitbucket_client = BitbucketClient(
+            secrets.bitbucket.workspace,
+            secrets.bitbucket.email,
+            secrets.bitbucket.api_token,
+            cache,
+        )
+        # username = email's local-part (Bitbucket nickname conventionally matches).
+        # Placeholder for M4; a proper config field can land in M5+.
+        bb_username = secrets.bitbucket.email.split("@")[0]
+        bitbucket_poller = BitbucketPoller(
+            ui_state,
+            bitbucket_client,
+            bb_username,
+            cfg.bitbucket.repos,
+            interval_sec=cfg.bitbucket.poll_interval_sec,
+        )
+
     pomodoro = PomodoroEngine(
         ui_state,
         pomodoro_store,
@@ -149,6 +176,8 @@ async def _run() -> None:
     ]
     if jira_poller is not None:
         tasks.append(asyncio.create_task(jira_poller.run_forever()))
+    if bitbucket_poller is not None:
+        tasks.append(asyncio.create_task(bitbucket_poller.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")
@@ -158,6 +187,8 @@ async def _run() -> None:
     await asyncio.gather(*tasks, return_exceptions=True)
     if jira_client is not None:
         await jira_client.aclose()
+    if bitbucket_client is not None:
+        await bitbucket_client.aclose()
     pomodoro_store.close()
     await bridge.close()
     log.info("shutdown_complete")
