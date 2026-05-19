@@ -16,6 +16,11 @@ CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_120M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+# Move code + rodata into PSRAM. Espressif-recommended for RGB panels with
+# framebuffer in PSRAM — frees internal SRAM bandwidth otherwise contended
+# by instruction fetch competing with the panel's EDMA refresh.
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_ESPTOOLPY_FLASHFREQ_120M=y
 
@@ -31,6 +36,13 @@ CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
+# Route LVGL allocations through heap_caps (PSRAM-backed) instead of the
+# fixed 32 KB TLSF pool. ESP-IDF's RGB-panel reference config uses this.
+# Avoids the heap pressure that caused our earlier TLSF panic and lets the
+# carousel + top bar + dots widgets coexist with M3+'s pomodoro overlay
+# without worrying about LV_MEM_SIZE_KILOBYTES.
+CONFIG_LV_MEM_CUSTOM=y
+CONFIG_LV_MEMCPY_MEMSET_STD=y
 
 # Flash size (16 MB)
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y

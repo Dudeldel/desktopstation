@@ -47,6 +47,12 @@ static esp_err_t init_rgb_panel(esp_lcd_panel_handle_t *out_panel)
         .data_width = 16,
         .psram_trans_align = 64,
         .num_fbs = 2,
+        // Bounce buffer was tried for bandwidth relief but virtualizes the FBs
+        // in a way incompatible with LVGL direct-mode rendering. The proper
+        // bandwidth fix is in sdkconfig: SPIRAM_FETCH_INSTRUCTIONS + RODATA
+        // (frees internal SRAM bandwidth competed for by EDMA) and
+        // LV_MEM_CUSTOM (route LVGL allocations through heap_caps instead of
+        // the small fixed TLSF pool).
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .disp_gpio_num = LCD_PIN_DISP,
         .pclk_gpio_num = LCD_PIN_PCLK,

@@ -34,7 +34,11 @@ static void autoscroll_cb(lv_timer_t *t)
 
     int next = (s_active + 1) % CAROUSEL_TILES;
     s_pending_via = "autoscroll";
-    carousel_set_active(next, true);
+    // Snap rather than animate. At 800×480 full_refresh on this hardware LVGL
+    // only renders ~25 fps, so the ~300 ms slide animation breaks into ~7 large
+    // visible steps that read as flicker rather than a smooth scroll. Snapping
+    // also avoids the leftward-rewind on wrap (3 → 0).
+    carousel_set_active(next, false);
 }
 
 /* ------------------------------------------------------------------ */
@@ -97,19 +101,11 @@ void carousel_init(lv_obj_t *parent)
     /* Touch resets autoscroll timer */
     lv_obj_add_event_cb(s_tv, _on_pressed, LV_EVENT_PRESSED, NULL);
 
-    /* --- tiles --- */
+    /* --- tiles: screen_N modules attach their content here in ui_build_main_screen --- */
     for (int i = 0; i < CAROUSEL_TILES; i++) {
         lv_obj_t *tile = lv_tileview_add_tile(s_tv, i, 0, LV_DIR_HOR);
         lv_obj_set_style_bg_color(tile, theme_bg(), 0);
         lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
-
-        /* Placeholder label */
-        lv_obj_t *label = lv_label_create(tile);
-        lv_label_set_text_fmt(label, "Screen %d - TBD", i + 1);
-        lv_obj_set_style_text_font(label, THEME_FONT_LARGE, 0);
-        lv_obj_set_style_text_color(label, theme_text_dim(), 0);
-        lv_obj_center(label);
-
         s_tiles[i] = tile;
     }
 

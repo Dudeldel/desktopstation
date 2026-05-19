@@ -25,12 +25,21 @@ static const char *TAG = "ui";
 
 static lv_disp_drv_t s_disp_drv;
 static lv_disp_draw_buf_t s_draw_buf;
+static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_touch_handle_t s_touch;
 
 static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {
-    (void)area;
-    (void)color_map;
+    // Direct mode + full_refresh: color_map IS one of the panel's framebuffers.
+    // esp_lcd_panel_draw_bitmap recognizes that and switches the active FB
+    // (no memcpy), which drives the vsync-aligned swap state machine inside
+    // the RGB panel driver. Without this call the panel keeps scanning the
+    // same FB forever while LVGL writes new frames to the other one —
+    // manifests as mostly-black screen with content flashing only on touch.
+    esp_lcd_panel_draw_bitmap(s_panel,
+                              area->x1, area->y1,
+                              area->x2 + 1, area->y2 + 1,
+                              color_map);
     lv_disp_flush_ready(drv);
 }
 
@@ -63,6 +72,7 @@ static void lvgl_task(void *arg)
 
 esp_err_t ui_init(esp_lcd_panel_handle_t panel, esp_lcd_touch_handle_t touch)
 {
+    s_panel = panel;
     s_touch = touch;
 
     lv_init();
