@@ -5,7 +5,7 @@ Per spec/02-serial-protocol.md: host pushes full snapshots, rate-limit 5 msg/s/s
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import structlog
 
@@ -39,6 +39,25 @@ log = structlog.get_logger(__name__)
 
 _RATE_LIMIT_PER_SEC = 5
 _MIN_INTERVAL_SEC = 1.0 / _RATE_LIMIT_PER_SEC
+
+
+class _Unset:
+    """Sentinel marker for ``set_screen_1(next_meeting=...)``.
+
+    ``next_meeting`` is genuinely tri-valued: ``MeetingBar`` to display,
+    ``None`` to explicitly clear, and "leave alone" so callers that only
+    own task lists (Jira poller) don't clobber what the calendar poller
+    just set. Cannot use ``None`` as the default — it would be the
+    "clear" signal — so a private sentinel singleton it is.
+    """
+
+    _instance: "Final[_Unset | None]" = None
+
+    def __repr__(self) -> str:  # pragma: no cover - cosmetic
+        return "<UNSET>"
+
+
+_UNSET: Final = _Unset()
 
 
 class UIState:
@@ -79,13 +98,19 @@ class UIState:
         self,
         today_tasks: list[JiraTask] | None = None,
         queued_tasks: list[JiraTask] | None = None,
-        next_meeting: MeetingBar | None = None,
+        next_meeting: MeetingBar | None | _Unset = _UNSET,
     ) -> None:
+        # All three fields are merged: omitting a keyword leaves the prior
+        # value untouched. ``next_meeting`` uses a sentinel because ``None``
+        # is meaningful (it clears the meeting bar). Without this, the Jira
+        # poller (owns task lists) and the Calendar poller (owns meeting)
+        # would silently overwrite each other on every tick.
         if today_tasks is not None:
             self._screen_1.today_tasks = today_tasks
         if queued_tasks is not None:
             self._screen_1.queued_tasks = queued_tasks
-        self._screen_1.next_meeting = next_meeting
+        if not isinstance(next_meeting, _Unset):
+            self._screen_1.next_meeting = next_meeting
         self._schedule_send("screen_1")
 
     def set_screen_2(self, notifications: list[Notification]) -> None:

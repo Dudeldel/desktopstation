@@ -69,6 +69,15 @@ class GoogleChatPollerConfig(BaseModel):
     my_email: str = ""
 
 
+class CalendarPollerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+    # 1 min when next meeting within ``near_window_sec``; 5 min otherwise.
+    near_interval_sec: float = 60.0
+    far_interval_sec: float = 300.0
+    near_window_sec: float = 30 * 60
+
+
 class DbusListenerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = True
@@ -89,6 +98,7 @@ class Config(BaseModel):
     bitbucket: BitbucketPollerConfig = Field(default_factory=BitbucketPollerConfig)
     gmail: GmailPollerConfig = Field(default_factory=GmailPollerConfig)
     gchat: GoogleChatPollerConfig = Field(default_factory=GoogleChatPollerConfig)
+    calendar: CalendarPollerConfig = Field(default_factory=CalendarPollerConfig)
     dbus: DbusListenerConfig = Field(default_factory=DbusListenerConfig)
 
 

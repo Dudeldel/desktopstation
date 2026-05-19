@@ -22,6 +22,7 @@ from deskstation.bridge.protocol import (
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
 from deskstation.clients.bitbucket import BitbucketClient
+from deskstation.clients.gcal import GoogleCalendarClient
 from deskstation.clients.gchat import GoogleChatClient
 from deskstation.clients.gmail import GmailClient
 from deskstation.clients.jira import JiraClient
@@ -31,6 +32,7 @@ from deskstation.engines.screen2_merger import Screen2Merger
 from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
+from deskstation.pollers.calendar import CalendarPoller
 from deskstation.pollers.gchat import GoogleChatPoller
 from deskstation.pollers.gmail import GmailPoller
 from deskstation.pollers.jira import JiraPoller
@@ -174,10 +176,10 @@ async def _run() -> None:
         )
 
     # Load Google OAuth credentials once and share across Gmail + Chat
-    # (+ Calendar in M5.6). ``load_credentials()`` is cheap when a token
-    # file is missing (returns None immediately).
+    # + Calendar. ``load_credentials()`` is cheap when a token file is
+    # missing (returns None immediately).
     google_creds = None
-    if cfg.gmail.enabled or cfg.gchat.enabled:
+    if cfg.gmail.enabled or cfg.gchat.enabled or cfg.calendar.enabled:
         google_creds = auth_google.load_credentials()
 
     # M5.5: single owner of the ``screen_2`` dispatch. Constructed before
@@ -210,6 +212,22 @@ async def _run() -> None:
             interval_sec=cfg.gchat.poll_interval_sec,
             merger=screen2_merger,
         )
+
+    # Calendar poller — drives screen_1.next_meeting. UIState.set_screen_1
+    # now merges keyword args (M5.6 sentinel fix) so this can coexist with
+    # the Jira poller without overwriting each other.
+    calendar_client: GoogleCalendarClient | None = None
+    calendar_poller: CalendarPoller | None = None
+    if google_creds is not None and cfg.calendar.enabled:
+        calendar_client = GoogleCalendarClient(google_creds, cache)
+        calendar_poller = CalendarPoller(
+            ui_state,
+            calendar_client,
+            near_interval_sec=cfg.calendar.near_interval_sec,
+            far_interval_sec=cfg.calendar.far_interval_sec,
+            near_window_sec=cfg.calendar.near_window_sec,
+        )
+
     dbus_listener: DbusNotificationListener | None = None
     if cfg.dbus.enabled:
         dbus_listener = DbusNotificationListener(
@@ -294,6 +312,8 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(gmail_poller.run_forever()))
     if gchat_poller is not None:
         tasks.append(asyncio.create_task(gchat_poller.run_forever()))
+    if calendar_poller is not None:
+        tasks.append(asyncio.create_task(calendar_poller.run_forever()))
     if dbus_listener is not None:
         tasks.append(asyncio.create_task(_dbus_to_merger()))
 
@@ -307,6 +327,8 @@ async def _run() -> None:
         await jira_client.aclose()
     if bitbucket_client is not None:
         await bitbucket_client.aclose()
+    if calendar_client is not None:
+        await calendar_client.aclose()
     if dbus_listener is not None:
         await dbus_listener.stop()
     pomodoro_store.close()
