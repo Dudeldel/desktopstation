@@ -38,6 +38,21 @@ class MockConfig(BaseModel):
     interval_sec: float = 5.0
 
 
+class JiraPollerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_key: str = ""
+    poll_interval_sec: float = 60.0
+    enabled: bool = True
+
+
+class BitbucketPollerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace: str = ""
+    repos: list[str] = Field(default_factory=list)
+    poll_interval_sec: float = 60.0
+    enabled: bool = True
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
@@ -45,6 +60,8 @@ class Config(BaseModel):
     heartbeat: HeartbeatConfig = Field(default_factory=HeartbeatConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     mock: MockConfig = Field(default_factory=MockConfig)
+    jira: JiraPollerConfig = Field(default_factory=JiraPollerConfig)
+    bitbucket: BitbucketPollerConfig = Field(default_factory=BitbucketPollerConfig)
 
 
 def load_config(path: Path | None = None) -> Config:
