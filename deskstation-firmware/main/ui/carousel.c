@@ -21,6 +21,7 @@ static const char *s_pending_via    = "swipe";
 /* ------------------------------------------------------------------ */
 static void _on_value_changed(lv_event_t *e);
 static void _on_pressed(lv_event_t *e);
+static void _on_gesture(lv_event_t *e);
 static void autoscroll_cb(lv_timer_t *t);
 
 /* ------------------------------------------------------------------ */
@@ -42,13 +43,40 @@ static void autoscroll_cb(lv_timer_t *t)
 }
 
 /* ------------------------------------------------------------------ */
-/* Touch handler — reset timer with 30 s grace period                  */
+/* Touch handler — pause autoscroll until the user actually swipes.    */
+/* Swiping completes via LV_EVENT_VALUE_CHANGED, which resumes the     */
+/* timer afresh. A tap that doesn't lead to a swipe leaves the panel   */
+/* on the user's current tile indefinitely — they're looking at it.    */
 /* ------------------------------------------------------------------ */
 static void _on_pressed(lv_event_t *e)
 {
     (void)e;
-    lv_timer_set_period(s_autoscroll, 30000);
-    lv_timer_reset(s_autoscroll);
+    if (s_autoscroll) lv_timer_pause(s_autoscroll);
+}
+
+/* ------------------------------------------------------------------ */
+/* Gesture handler — wrap around manual swipes at the carousel edges. */
+/* LVGL's tileview hard-stops at the first/last tile; we want a swipe */
+/* past the edge to snap to the opposite end, matching autoscroll.    */
+/* ------------------------------------------------------------------ */
+static void _on_gesture(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+
+    /* LV_DIR_LEFT = finger swept left = user wants the next-right tile.
+     * LV_DIR_RIGHT = finger swept right = user wants the previous-left tile. */
+    if (dir == LV_DIR_LEFT && s_active == CAROUSEL_TILES - 1) {
+        lv_indev_wait_release(indev);
+        s_pending_via = "swipe";
+        carousel_set_active(0, false);
+    } else if (dir == LV_DIR_RIGHT && s_active == 0) {
+        lv_indev_wait_release(indev);
+        s_pending_via = "swipe";
+        carousel_set_active(CAROUSEL_TILES - 1, false);
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -77,6 +105,15 @@ static void _on_value_changed(lv_event_t *e)
         line.len = (size_t)n;
         xQueueSend(usb_cdc_tx_queue(), &line, 0);
     }
+
+    /* Re-arm the autoscroll: a successful tile change (manual swipe or wrap)
+     * resumes the 10 s cycle. _on_pressed paused it; resuming here means a
+     * tap-without-swipe stays paused, while a real swipe gets autoscroll back. */
+    if (s_autoscroll) {
+        lv_timer_set_period(s_autoscroll, 10000);
+        lv_timer_reset(s_autoscroll);
+        lv_timer_resume(s_autoscroll);
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -98,8 +135,11 @@ void carousel_init(lv_obj_t *parent)
     /* Track active index via scroll events */
     lv_obj_add_event_cb(s_tv, _on_value_changed, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* Touch resets autoscroll timer */
+    /* Touch pauses autoscroll until a swipe completes */
     lv_obj_add_event_cb(s_tv, _on_pressed, LV_EVENT_PRESSED, NULL);
+
+    /* Wrap manual swipes at the edges (LVGL tileview doesn't wrap by default) */
+    lv_obj_add_event_cb(s_tv, _on_gesture, LV_EVENT_GESTURE, NULL);
 
     /* --- tiles: screen_N modules attach their content here in ui_build_main_screen --- */
     for (int i = 0; i < CAROUSEL_TILES; i++) {
