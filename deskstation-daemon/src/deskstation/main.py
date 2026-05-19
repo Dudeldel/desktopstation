@@ -19,10 +19,14 @@ from deskstation.bridge.protocol import (
     ToastMsg,
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
+from deskstation.clients.jira import JiraClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.logging_setup import configure_logging
+from deskstation.pollers.jira import JiraPoller
 from deskstation.pollers.mock import start_all_mocks
+from deskstation.secrets import load_secrets
+from deskstation.store.api_cache import ApiCache
 from deskstation.store.pomodoro_store import PomodoroStore
 from deskstation.ui_state import UIState
 
@@ -100,7 +104,31 @@ async def _run() -> None:
     ui_state = UIState(bridge)
 
     pomodoro_store = PomodoroStore()
-    pomodoro = PomodoroEngine(ui_state, pomodoro_store)
+
+    secrets = load_secrets()
+    cache = ApiCache()
+    jira_client: JiraClient | None = None
+    jira_poller: JiraPoller | None = None
+    if secrets.jira is not None and cfg.jira.enabled and cfg.jira.project_key:
+        jira_client = JiraClient(
+            secrets.jira.base_url,
+            secrets.jira.email,
+            secrets.jira.api_token,
+            cache,
+        )
+        jira_poller = JiraPoller(
+            ui_state,
+            jira_client,
+            cfg.jira.project_key,
+            interval_sec=cfg.jira.poll_interval_sec,
+        )
+
+    pomodoro = PomodoroEngine(
+        ui_state,
+        pomodoro_store,
+        task_index=jira_poller.lookup_summary if jira_poller is not None else None,
+        worklog=jira_client.add_worklog if jira_client is not None else None,
+    )
 
     mock_tasks: list[asyncio.Task[None]] = []
     if cfg.mock.enabled:
@@ -119,6 +147,8 @@ async def _run() -> None:
         pomodoro.start(),
         *mock_tasks,
     ]
+    if jira_poller is not None:
+        tasks.append(asyncio.create_task(jira_poller.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")
@@ -126,6 +156,8 @@ async def _run() -> None:
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+    if jira_client is not None:
+        await jira_client.aclose()
     pomodoro_store.close()
     await bridge.close()
     log.info("shutdown_complete")

@@ -209,6 +209,100 @@ async def test_bridge_receives_fullscreen_and_top_bar_on_completion(tmp_path: Pa
     assert saw_counter_one, "expected top_bar with counter=1 on completion"
 
 
+# ---------------------------------------------------------------------------
+# M4.4: task_index + worklog callbacks
+# ---------------------------------------------------------------------------
+
+
+async def test_engine_uses_task_index_for_summary(tmp_path: Path) -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    store = PomodoroStore(tmp_path / "pomo.sqlite3")
+    engine = PomodoroEngine(
+        ui,
+        store,
+        task_index=lambda k: "Looked up summary",
+    )
+    engine.start_task("DEV-1")
+    assert engine.snapshot().task_summary == "Looked up summary"
+
+
+async def test_engine_passes_explicit_summary_over_index(tmp_path: Path) -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    store = PomodoroStore(tmp_path / "pomo.sqlite3")
+    engine = PomodoroEngine(
+        ui,
+        store,
+        task_index=lambda k: "From index",
+    )
+    engine.start_task("DEV-1", summary="Override")
+    assert engine.snapshot().task_summary == "Override"
+
+
+async def test_engine_invokes_worklog_callback_on_completion(tmp_path: Path) -> None:
+    calls: list[tuple[str, int]] = []
+
+    async def worklog(key: str, seconds: int) -> bool:
+        calls.append((key, seconds))
+        return True
+
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    store = PomodoroStore(tmp_path / "pomo.sqlite3")
+    cfg = PomodoroConfig(pomodoro_sec=10, short_break_sec=3, long_break_sec=6)
+    engine = PomodoroEngine(ui, store, cfg, worklog=worklog)
+
+    engine.start_task("DEV-42")
+    engine.tick()  # 9
+    engine.tick()  # 8
+    engine.stop_with_log()  # forces _complete with elapsed = 10 - 8 = 2
+
+    # _complete schedules worklog as a background task; give it a chance to run.
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert calls == [("DEV-42", 2)]
+
+
+async def test_engine_skips_worklog_for_loose_pomodoro(tmp_path: Path) -> None:
+    calls: list[tuple[str, int]] = []
+
+    async def worklog(key: str, seconds: int) -> bool:
+        calls.append((key, seconds))
+        return True
+
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    store = PomodoroStore(tmp_path / "pomo.sqlite3")
+    engine = PomodoroEngine(ui, store, worklog=worklog)
+
+    engine.start_loose()
+    engine.stop_with_log()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert calls == []
+
+
+async def test_engine_swallows_worklog_exception(tmp_path: Path) -> None:
+    async def worklog(key: str, seconds: int) -> bool:
+        raise RuntimeError("kaboom")
+
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    store = PomodoroStore(tmp_path / "pomo.sqlite3")
+    engine = PomodoroEngine(ui, store, worklog=worklog)
+
+    engine.start_task("DEV-1")
+    engine.stop_with_log()
+    # No exception should propagate; give the background task a chance to run.
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    # State machine continued normally into a break.
+    assert engine.snapshot().state == "short_break"
+
+
 async def test_run_loop_ticks_in_real_time(tmp_path: Path) -> None:
     engine, _, _, _ = _make_engine(tmp_path)
     engine._cfg = PomodoroConfig(  # type: ignore[misc]

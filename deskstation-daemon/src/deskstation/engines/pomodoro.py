@@ -26,6 +26,7 @@ top_bar update with the bumped counter after a completion.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -69,12 +70,17 @@ class PomodoroEngine:
         ui_state: UIState,
         store: PomodoroStore,
         config: PomodoroConfig | None = None,
+        task_index: Callable[[str], str | None] | None = None,
+        worklog: Callable[[str, int], Awaitable[bool]] | None = None,
     ) -> None:
         self._ui = ui_state
         self._store = store
         self._cfg = config if config is not None else PomodoroConfig()
         self._s = _State(pomodoro_number_today=store.count_completed_today())
         self._task: asyncio.Task[None] | None = None
+        self._task_index = task_index
+        self._worklog = worklog
+        self._bg_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------ inspection
 
@@ -111,6 +117,10 @@ class PomodoroEngine:
     # ------------------------------------------------------------------ actions
 
     def start_task(self, key: str, summary: str | None = None) -> None:
+        if summary is None and self._task_index is not None:
+            looked_up = self._task_index(key)
+            if looked_up is not None:
+                summary = looked_up
         self._s = _State(
             state="active",
             remaining_sec=self._cfg.pomodoro_sec,
@@ -212,6 +222,19 @@ class PomodoroEngine:
         self._push_state()
         self._push_break_fullscreen(is_long, break_total)
         self._ui.set_pomodoros_today(new_count)
+
+        if prev_key is not None and self._worklog is not None:
+            bg = asyncio.create_task(self._invoke_worklog(prev_key, elapsed))
+            self._bg_tasks.add(bg)
+            bg.add_done_callback(self._bg_tasks.discard)
+
+    async def _invoke_worklog(self, key: str, seconds: int) -> None:
+        assert self._worklog is not None
+        try:
+            result = await self._worklog(key, seconds)
+            log.info("worklog_posted", task_key=key, seconds=seconds, success=result)
+        except Exception as exc:
+            log.warning("worklog_failed", task_key=key, seconds=seconds, error=str(exc))
 
     def _go_idle(self) -> None:
         self._s = _State(pomodoro_number_today=self._s.pomodoro_number_today)
