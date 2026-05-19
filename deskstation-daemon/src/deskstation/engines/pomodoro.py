@@ -37,6 +37,7 @@ from deskstation.bridge.protocol import (
     PomodoroStateData,
     PomodoroStateName,
 )
+from deskstation.clients.jira import JiraAuthError
 
 if TYPE_CHECKING:
     from deskstation.store.pomodoro_store import PomodoroStore
@@ -80,6 +81,7 @@ class PomodoroEngine:
         self._task: asyncio.Task[None] | None = None
         self._task_index = task_index
         self._worklog = worklog
+        self._worklog_disabled: bool = False
         self._bg_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------ inspection
@@ -223,18 +225,29 @@ class PomodoroEngine:
         self._push_break_fullscreen(is_long, break_total)
         self._ui.set_pomodoros_today(new_count)
 
-        if prev_key is not None and self._worklog is not None:
-            bg = asyncio.create_task(self._invoke_worklog(prev_key, elapsed))
+        if prev_key is not None and self._worklog is not None and not self._worklog_disabled:
+            cb = self._worklog
+            bg = asyncio.create_task(self._invoke_worklog(cb, prev_key, elapsed))
             self._bg_tasks.add(bg)
             bg.add_done_callback(self._bg_tasks.discard)
 
-    async def _invoke_worklog(self, key: str, seconds: int) -> None:
-        assert self._worklog is not None
+    async def _invoke_worklog(
+        self,
+        cb: Callable[[str, int], Awaitable[bool]],
+        key: str,
+        seconds: int,
+    ) -> None:
         try:
-            result = await self._worklog(key, seconds)
-            log.info("worklog_posted", task_key=key, seconds=seconds, success=result)
+            ok = await cb(key, seconds)
+            if not ok:
+                log.warning("worklog_failed", task_key=key, seconds=seconds)
+            else:
+                log.info("worklog_posted", task_key=key, seconds=seconds, success=ok)
+        except JiraAuthError as exc:
+            self._worklog_disabled = True
+            log.error("worklog_disabled_auth_error", task_key=key, error=str(exc))
         except Exception as exc:
-            log.warning("worklog_failed", task_key=key, seconds=seconds, error=str(exc))
+            log.warning("worklog_raised", task_key=key, error=str(exc))
 
     def _go_idle(self) -> None:
         self._s = _State(pomodoro_number_today=self._s.pomodoro_number_today)

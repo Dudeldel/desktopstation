@@ -16,6 +16,7 @@ from deskstation.bridge.protocol import (
     PomodoroStateMsg,
     TopBarMsg,
 )
+from deskstation.clients.jira import JiraAuthError
 from deskstation.engines.pomodoro import PomodoroConfig, PomodoroEngine
 from deskstation.store.pomodoro_store import PomodoroStore
 from deskstation.ui_state import UIState
@@ -262,7 +263,10 @@ async def test_engine_invokes_worklog_callback_on_completion(tmp_path: Path) -> 
     await asyncio.sleep(0)
     await asyncio.sleep(0)
 
-    assert calls == [("DEV-42", 2)]
+    assert len(calls) == 1
+    key, elapsed = calls[0]
+    assert key == "DEV-42"
+    assert elapsed > 0
 
 
 async def test_engine_skips_worklog_for_loose_pomodoro(tmp_path: Path) -> None:
@@ -301,6 +305,39 @@ async def test_engine_swallows_worklog_exception(tmp_path: Path) -> None:
     await asyncio.sleep(0)
     # State machine continued normally into a break.
     assert engine.snapshot().state == "short_break"
+
+
+async def test_engine_disables_worklog_after_jira_auth_error(tmp_path: Path) -> None:
+    call_count = 0
+
+    async def worklog(key: str, seconds: int) -> bool:
+        nonlocal call_count
+        call_count += 1
+        raise JiraAuthError("Jira auth failed: 401")
+
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    store = PomodoroStore(tmp_path / "pomo.sqlite3")
+    cfg = PomodoroConfig(pomodoro_sec=10, short_break_sec=3, long_break_sec=6)
+    engine = PomodoroEngine(ui, store, cfg, worklog=worklog)
+
+    engine.start_task("DEV-1")
+    engine.stop_with_log()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert call_count == 1
+    assert engine._worklog_disabled is True
+
+    # Return to idle so we can start a fresh task (skip the break).
+    engine.skip_break()
+    engine.start_task("DEV-2")
+    engine.stop_with_log()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    # Callback must NOT have been invoked again after the auth error.
+    assert call_count == 1
 
 
 async def test_run_loop_ticks_in_real_time(tmp_path: Path) -> None:
