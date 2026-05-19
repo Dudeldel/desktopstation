@@ -69,6 +69,15 @@ class GoogleChatPollerConfig(BaseModel):
     my_email: str = ""
 
 
+class DbusListenerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+    app_name_patterns: list[str] = Field(
+        default_factory=lambda: ["WhatsApp*", "Messenger*", "Slack*"]
+    )
+    buffer_size: int = 32
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
@@ -80,6 +89,7 @@ class Config(BaseModel):
     bitbucket: BitbucketPollerConfig = Field(default_factory=BitbucketPollerConfig)
     gmail: GmailPollerConfig = Field(default_factory=GmailPollerConfig)
     gchat: GoogleChatPollerConfig = Field(default_factory=GoogleChatPollerConfig)
+    dbus: DbusListenerConfig = Field(default_factory=DbusListenerConfig)
 
 
 def load_config(path: Path | None = None) -> Config:

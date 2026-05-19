@@ -27,6 +27,7 @@ from deskstation.clients.gmail import GmailClient
 from deskstation.clients.jira import JiraClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
+from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
 from deskstation.pollers.gchat import GoogleChatPoller
@@ -200,11 +201,25 @@ async def _run() -> None:
             my_email=cfg.gchat.my_email,
             interval_sec=cfg.gchat.poll_interval_sec,
         )
+    dbus_listener: DbusNotificationListener | None = None
+    if cfg.dbus.enabled:
+        dbus_listener = DbusNotificationListener(
+            app_name_patterns=cfg.dbus.app_name_patterns,
+            buffer_size=cfg.dbus.buffer_size,
+        )
+        try:
+            await dbus_listener.start()
+            log.info("dbus_listener_active", patterns=cfg.dbus.app_name_patterns)
+        except Exception as exc:
+            log.warning("dbus_listener_unavailable", error=str(exc))
+            dbus_listener = None
+
     # TODO(M5.5): Screen2Merger will replace direct ``set_screen_2`` calls
-    # from Gmail / Chat / dbus pollers. Today Gmail and Chat both write
+    # from Gmail / Chat / dbus listener. Today Gmail and Chat both write
     # screen_2 independently — last writer wins, which is a temporary
     # known issue. M5.5 introduces an aggregator that merges
-    # ``latest_notifications()`` from each source.
+    # ``latest_notifications()`` (and the dbus listener's ``snapshot()``)
+    # from each source.
 
     pomodoro = PomodoroEngine(
         ui_state,
@@ -223,6 +238,8 @@ async def _run() -> None:
     if gmail_poller is not None:
         skip.add("screen_2")
     if gchat_poller is not None:
+        skip.add("screen_2")
+    if dbus_listener is not None:
         skip.add("screen_2")
     if skip:
         log.info("mocks_skip_applied", skip=sorted(skip))
@@ -267,6 +284,8 @@ async def _run() -> None:
         await jira_client.aclose()
     if bitbucket_client is not None:
         await bitbucket_client.aclose()
+    if dbus_listener is not None:
+        await dbus_listener.stop()
     pomodoro_store.close()
     await bridge.close()
     log.info("shutdown_complete")
