@@ -26,7 +26,7 @@ from deskstation.bridge.protocol import (
 )
 from deskstation.clients.gcal import Meeting
 from deskstation.engines.screen2_merger import Screen2Merger
-from deskstation.main import _dispatch, _xdg_open
+from deskstation.main import DispatchContext, _dispatch, _xdg_open
 from deskstation.pollers.calendar import CalendarPoller
 from deskstation.ui_state import UIState
 
@@ -55,16 +55,15 @@ async def _run_dispatch_once(
     ui = UIState(bridge)
     monitor = ConnectionMonitor()
     pomodoro = MagicMock()
-    task = asyncio.create_task(
-        _dispatch(
-            bridge,
-            monitor,
-            ui,
-            pomodoro,
-            merger=merger,
-            calendar_poller=calendar_poller,
-        )
+    ctx = DispatchContext(
+        bridge=bridge,
+        monitor=monitor,
+        ui_state=ui,
+        pomodoro=pomodoro,
+        merger=merger,
+        calendar_poller=calendar_poller,
     )
+    task = asyncio.create_task(_dispatch(ctx))
     # Give the dispatcher loop time to consume injected envelopes. The
     # MockBridge.stream() polls with a 50 ms timeout, so 200 ms is plenty
     # for a single envelope.
@@ -183,3 +182,40 @@ async def test_meeting_join_unknown_id_no_xdg_open() -> None:
         await _run_dispatch_once(bridge, calendar_poller=poller)
 
     mock_run.assert_not_called()
+
+
+async def test_unknown_envelope_type_logs_and_continues() -> None:
+    """A future envelope class not in ``_HANDLERS`` must not crash the loop.
+
+    Locks in the openness of the handler table: adding a new envelope type
+    in protocol.py without a matching handler should degrade to a logged
+    warning, not a dispatcher exception.
+    """
+
+    class _FakeData:
+        id = "f1"
+
+    class _UnknownEnvelope:
+        """Not a Pydantic model, deliberately not in ``_HANDLERS``."""
+
+        data = _FakeData()
+
+    bridge = MockBridge()
+    # Bypass MockBridge.inject() typing — the whole point is that this
+    # envelope class isn't in the Envelope union.
+    await bridge._inbound.put(_UnknownEnvelope())  # type: ignore[arg-type]
+    # Follow with a real envelope to prove the loop kept going.
+    await bridge.inject(NotificationActionMsg(data=NotificationActionData(id="real")))
+
+    ui = UIState(bridge)
+    merger = Screen2Merger(ui)
+    merger.register_url("real", "https://example.com/after-unknown")
+
+    with patch("deskstation.main.subprocess.run") as mock_run:
+        await _run_dispatch_once(bridge, merger=merger)
+
+    # The loop survived the unknown envelope and dispatched the next one.
+    mock_run.assert_called_once_with(
+        ["xdg-open", "https://example.com/after-unknown"],
+        check=False,
+    )

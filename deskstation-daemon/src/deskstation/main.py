@@ -3,7 +3,10 @@
 import asyncio
 import signal
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -70,83 +73,141 @@ async def _xdg_open(url: str) -> None:
         log.warning("xdg_open_failed", url=url, error=str(exc))
 
 
-async def _dispatch(
-    bridge: BridgeProtocol,
-    monitor: ConnectionMonitor,
-    ui_state: UIState,
-    pomodoro: PomodoroEngine,
-    merger: Screen2Merger | None = None,
-    calendar_poller: CalendarPoller | None = None,
+@dataclass
+class DispatchContext:
+    """Bundle of dependencies passed to every dispatch handler.
+
+    New M6+ dependencies (weather, standup, reminders, macros, todo) land
+    here as optional kwargs so handler signatures stay uniform.
+    """
+
+    bridge: BridgeProtocol
+    monitor: ConnectionMonitor
+    ui_state: UIState
+    pomodoro: PomodoroEngine
+    merger: Screen2Merger | None = None
+    calendar_poller: CalendarPoller | None = None
+
+
+def handle_hello(ctx: DispatchContext, env: HelloMsg) -> None:
+    log.info("hello_received", firmware_version=env.data.firmware_version)
+
+
+def handle_heartbeat(ctx: DispatchContext, env: HeartbeatMsg) -> None:
+    log.debug("heartbeat_received")
+
+
+def handle_screen_changed(ctx: DispatchContext, env: ScreenChangedMsg) -> None:
+    log.info("screen_changed_received", screen=env.data.screen)
+
+
+def handle_ack(ctx: DispatchContext, env: AckMsg) -> None:
+    log.debug("ack_received", of_type=env.data.of_type)
+
+
+def handle_toast(ctx: DispatchContext, env: ToastMsg) -> None:
+    log.warning("toast_from_esp_ignored", text=env.data.text)
+
+
+def handle_task_clicked(ctx: DispatchContext, env: TaskClickedMsg) -> None:
+    # M3: start a pomodoro for the clicked task. task_summary lookup
+    # arrives in M4 with the real Jira poller; for now we pass None.
+    ctx.pomodoro.start_task(env.data.key)
+
+
+def handle_pomodoro_action(ctx: DispatchContext, env: PomodoroActionMsg) -> None:
+    action = env.data.action
+    if action == "pause":
+        ctx.pomodoro.pause()
+    elif action == "resume":
+        ctx.pomodoro.resume()
+    elif action == "stop_with_log":
+        ctx.pomodoro.stop_with_log()
+    elif action == "cancel":
+        ctx.pomodoro.cancel()
+    elif action == "start_loose":
+        ctx.pomodoro.start_loose()
+    elif action == "skip_break":
+        ctx.pomodoro.skip_break()
+
+
+def handle_fullscreen_dismiss(ctx: DispatchContext, env: FullscreenDismissMsg) -> None:
+    # Dismissing a break overlay short-circuits the break (same as skip_break).
+    log.info("fullscreen_dismissed", kind=env.data.kind)
+    ctx.pomodoro.skip_break()
+
+
+async def handle_notification_action(
+    ctx: DispatchContext,
+    env: NotificationActionMsg | NotificationClickedMsg,
 ) -> None:
-    was_connected = monitor.is_connected
-    async for env in bridge.stream():
-        monitor.mark_rx()
+    # NotificationClickedMsg is the legacy M2 name; firmware still emits it.
+    # Both resolve to the same lookup-then-xdg-open path.
+    notification_id = env.data.id
+    if ctx.merger is None:
+        log.warning(
+            "notification_action_no_merger",
+            notification_id=notification_id,
+        )
+        return
+    url = ctx.merger.lookup_url(notification_id)
+    if url is None:
+        log.warning(
+            "notification_action_unknown_id",
+            notification_id=notification_id,
+        )
+        return
+    await _xdg_open(url)
+
+
+async def handle_meeting_join(ctx: DispatchContext, env: MeetingJoinMsg) -> None:
+    meeting_id = env.data.id
+    if ctx.calendar_poller is None:
+        log.warning("meeting_join_no_calendar", meeting_id=meeting_id)
+        return
+    url = ctx.calendar_poller.lookup_meeting_url(meeting_id)
+    if url is None:
+        log.warning("meeting_join_unknown_id", meeting_id=meeting_id)
+        return
+    await _xdg_open(url)
+
+
+# Envelope class → handler. Heterogeneous return types (sync None vs async
+# coroutine) are intentional: the dispatch loop awaits whatever shape the
+# handler returns. ``Any`` carries the type union; mypy doesn't gain from
+# narrowing here since the dispatch site already keys on runtime ``type(env)``.
+_HANDLERS: dict[type, Callable[..., Any]] = {
+    HelloMsg: handle_hello,
+    HeartbeatMsg: handle_heartbeat,
+    ScreenChangedMsg: handle_screen_changed,
+    AckMsg: handle_ack,
+    ToastMsg: handle_toast,
+    TaskClickedMsg: handle_task_clicked,
+    PomodoroActionMsg: handle_pomodoro_action,
+    FullscreenDismissMsg: handle_fullscreen_dismiss,
+    NotificationActionMsg: handle_notification_action,
+    NotificationClickedMsg: handle_notification_action,  # legacy alias
+    MeetingJoinMsg: handle_meeting_join,
+}
+
+
+async def _dispatch(ctx: DispatchContext) -> None:
+    was_connected = ctx.monitor.is_connected
+    async for env in ctx.bridge.stream():
+        ctx.monitor.mark_rx()
         if not was_connected:
             log.info("reconnect_resending_ui_state")
-            await ui_state.resend_all()
-        was_connected = monitor.is_connected
-        if isinstance(env, HelloMsg):
-            log.info("hello_received", firmware_version=env.data.firmware_version)
-        elif isinstance(env, HeartbeatMsg):
-            log.debug("heartbeat_received")
-        elif isinstance(env, ScreenChangedMsg):
-            log.info("screen_changed_received", screen=env.data.screen)
-        elif isinstance(env, AckMsg):
-            log.debug("ack_received", of_type=env.data.of_type)
-        elif isinstance(env, ToastMsg):
-            log.warning("toast_from_esp_ignored", text=env.data.text)
-        elif isinstance(env, TaskClickedMsg):
-            # M3: start a pomodoro for the clicked task. task_summary lookup
-            # arrives in M4 with the real Jira poller; for now we pass None.
-            pomodoro.start_task(env.data.key)
-        elif isinstance(env, PomodoroActionMsg):
-            action = env.data.action
-            if action == "pause":
-                pomodoro.pause()
-            elif action == "resume":
-                pomodoro.resume()
-            elif action == "stop_with_log":
-                pomodoro.stop_with_log()
-            elif action == "cancel":
-                pomodoro.cancel()
-            elif action == "start_loose":
-                pomodoro.start_loose()
-            elif action == "skip_break":
-                pomodoro.skip_break()
-        elif isinstance(env, FullscreenDismissMsg):
-            # Dismissing a break overlay short-circuits the break (same as skip_break).
-            log.info("fullscreen_dismissed", kind=env.data.kind)
-            pomodoro.skip_break()
-        elif isinstance(env, NotificationActionMsg | NotificationClickedMsg):
-            # NotificationClickedMsg is the legacy M2 name; firmware still
-            # emits it. Both resolve to the same lookup-then-xdg-open path.
-            notification_id = env.data.id
-            if merger is None:
-                log.warning(
-                    "notification_action_no_merger",
-                    notification_id=notification_id,
-                )
-            else:
-                url = merger.lookup_url(notification_id)
-                if url is None:
-                    log.warning(
-                        "notification_action_unknown_id",
-                        notification_id=notification_id,
-                    )
-                else:
-                    await _xdg_open(url)
-        elif isinstance(env, MeetingJoinMsg):
-            meeting_id = env.data.id
-            if calendar_poller is None:
-                log.warning("meeting_join_no_calendar", meeting_id=meeting_id)
-            else:
-                url = calendar_poller.lookup_meeting_url(meeting_id)
-                if url is None:
-                    log.warning("meeting_join_unknown_id", meeting_id=meeting_id)
-                else:
-                    await _xdg_open(url)
-        else:
-            log.warning("unknown_envelope_type")
+            await ctx.ui_state.resend_all()
+        was_connected = ctx.monitor.is_connected
+
+        handler = _HANDLERS.get(type(env))
+        if handler is None:
+            log.warning("unknown_envelope_type", type=type(env).__name__)
+            continue
+
+        result = handler(ctx, env)
+        if asyncio.iscoroutine(result):
+            await result
 
 
 def _check_google_oauth_setup() -> None:
@@ -344,18 +405,18 @@ async def _run() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop_event.set)
 
+    dispatch_ctx = DispatchContext(
+        bridge=bridge,
+        monitor=monitor,
+        ui_state=ui_state,
+        pomodoro=pomodoro,
+        merger=screen2_merger,
+        calendar_poller=calendar_poller,
+    )
+
     tasks = [
         asyncio.create_task(heartbeat_sender(bridge, interval_sec=cfg.heartbeat.interval_sec)),
-        asyncio.create_task(
-            _dispatch(
-                bridge,
-                monitor,
-                ui_state,
-                pomodoro,
-                merger=screen2_merger,
-                calendar_poller=calendar_poller,
-            )
-        ),
+        asyncio.create_task(_dispatch(dispatch_ctx)),
         asyncio.create_task(monitor.watchdog()),
         pomodoro.start(),
         *mock_tasks,

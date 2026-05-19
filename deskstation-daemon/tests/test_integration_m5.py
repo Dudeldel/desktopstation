@@ -38,7 +38,7 @@ from deskstation.clients.gcal import GoogleCalendarClient
 from deskstation.clients.gchat import ChatMessage, Space
 from deskstation.clients.gmail import GmailClient
 from deskstation.engines.screen2_merger import Screen2Merger
-from deskstation.main import _dispatch
+from deskstation.main import DispatchContext, _dispatch
 from deskstation.pollers.calendar import CalendarPoller
 from deskstation.pollers.gchat import GoogleChatPoller
 from deskstation.pollers.gmail import GmailPoller
@@ -320,16 +320,15 @@ async def test_meeting_join_via_dispatcher_runs_xdg_open(tmp_path: Path) -> None
     pomodoro = MagicMock()
 
     with patch("deskstation.main.subprocess.run") as mock_run:
-        task = asyncio.create_task(
-            _dispatch(
-                bridge,
-                monitor,
-                ui,
-                pomodoro,
-                merger=None,
-                calendar_poller=calendar_poller,
-            )
+        ctx = DispatchContext(
+            bridge=bridge,
+            monitor=monitor,
+            ui_state=ui,
+            pomodoro=pomodoro,
+            merger=None,
+            calendar_poller=calendar_poller,
         )
+        task = asyncio.create_task(_dispatch(ctx))
         # MockBridge.stream() polls with a 50 ms timeout; 200 ms is enough
         # for a single envelope to be consumed.
         await asyncio.sleep(0.2)
