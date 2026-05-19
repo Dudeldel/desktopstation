@@ -162,6 +162,31 @@ async def test_transient_error_leaves_state_intact() -> None:
     set_screen_1.assert_not_called()
 
 
+async def test_lookup_meeting_url_returns_join_url() -> None:
+    """After a tick populates _meetings, lookup returns the right URL."""
+    now = datetime.now(UTC)
+    start = now + timedelta(minutes=5)
+    end = now + timedelta(minutes=20)
+    meeting = _meeting(
+        "ev-42",
+        "Standup",
+        start,
+        end,
+        join_url="https://meet.google.com/standup-link",
+    )
+    poller, _ui, bridge, _ = _make_poller([[meeting]])
+
+    await poller.tick()
+    await bridge.received()  # drain emission
+
+    assert poller.lookup_meeting_url("ev-42") == "https://meet.google.com/standup-link"
+
+
+async def test_lookup_meeting_url_unknown_returns_none() -> None:
+    poller, _, _, _ = _make_poller([])
+    assert poller.lookup_meeting_url("does-not-exist") is None
+
+
 async def test_no_future_meetings_clears_meeting_bar() -> None:
     now = datetime.now(UTC)
     # Only past-and-ended meeting in response.

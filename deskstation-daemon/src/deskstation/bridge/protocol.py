@@ -296,6 +296,30 @@ class NotificationClickedMsg(BaseModel):
     data: NotificationClickedData
 
 
+class MeetingJoinData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+
+
+class MeetingJoinMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["meeting_join"] = "meeting_join"
+    data: MeetingJoinData
+
+
+class NotificationActionData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+
+
+class NotificationActionMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["notification_action"] = "notification_action"
+    data: NotificationActionData
+
+
 class TodoClickedData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
@@ -363,6 +387,8 @@ Envelope = Annotated[
     | TaskClickedMsg
     | PrClickedMsg
     | NotificationClickedMsg
+    | MeetingJoinMsg
+    | NotificationActionMsg
     | TodoClickedMsg
     | MacroTriggerMsg
     | PomodoroActionMsg

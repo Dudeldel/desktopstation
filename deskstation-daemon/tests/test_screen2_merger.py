@@ -255,6 +255,41 @@ def _chat_msg(name: str, text: str = "hello") -> ChatMessage:
     )
 
 
+async def test_register_url_and_lookup() -> None:
+    """register_url stores a URL; lookup returns it; unknown id returns None."""
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    merger = Screen2Merger(ui)
+
+    # Register URL without yet pushing notifications: the lookup index
+    # is independent of the surviving-id prune until update() runs.
+    merger.register_url("m1", "https://mail.google.com/mail/u/0/#inbox/m1")
+    assert merger.lookup_url("m1") == "https://mail.google.com/mail/u/0/#inbox/m1"
+    assert merger.lookup_url("unknown") is None
+
+
+async def test_register_url_pruned_when_source_replaces() -> None:
+    """A URL registered for an id is dropped when the source no longer emits that id."""
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    merger = Screen2Merger(ui)
+
+    n_x = _n("x", source="gmail")
+    merger.register_url("x", "https://example.com/x")
+    merger.update("gmail", [n_x])
+    await bridge.received()  # drain emission
+    assert merger.lookup_url("x") == "https://example.com/x"
+
+    # Re-push gmail with a different notification — "x" should be pruned.
+    n_y = _n("y", source="gmail")
+    merger.register_url("y", "https://example.com/y")
+    merger.update("gmail", [n_y])
+    await bridge.received()
+
+    assert merger.lookup_url("x") is None
+    assert merger.lookup_url("y") == "https://example.com/y"
+
+
 async def test_gchat_poller_with_merger_routes_through_it() -> None:
     bridge = MockBridge()
     ui = UIState(bridge)

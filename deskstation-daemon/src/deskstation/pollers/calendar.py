@@ -123,6 +123,19 @@ class CalendarPoller(MockPoller):
             sleep_sec = self._compute_next_interval()
             await asyncio.sleep(sleep_sec)
 
+    def lookup_meeting_url(self, meeting_id: str) -> str | None:
+        """Return the join URL for a meeting id, or None if not found.
+
+        Used by the dispatcher to resolve ``meeting_join{id}`` events
+        from the firmware. The poller already keeps the full meeting
+        list, so a linear scan is fine — the list is at most a few
+        dozen entries (36 h window) and lookups are rare (user-driven).
+        """
+        for m in self._meetings:
+            if m.id == meeting_id:
+                return m.join_url
+        return None
+
     def _build_meeting_bar(self, meetings: list[Meeting]) -> MeetingBar | None:
         now = datetime.now(UTC)
         soonest = _pick_soonest(meetings, now)

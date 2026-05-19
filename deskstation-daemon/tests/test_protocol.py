@@ -336,6 +336,24 @@ def test_parse_notification_clicked() -> None:
     assert env.data.id == "msg-001"
 
 
+def test_parse_meeting_join() -> None:
+    from deskstation.bridge.protocol import MeetingJoinMsg
+
+    line = '{"v":1,"type":"meeting_join","data":{"id":"ev-42"}}'
+    env = parse_envelope(line)
+    assert isinstance(env, MeetingJoinMsg)
+    assert env.data.id == "ev-42"
+
+
+def test_parse_notification_action() -> None:
+    from deskstation.bridge.protocol import NotificationActionMsg
+
+    line = '{"v":1,"type":"notification_action","data":{"id":"n2"}}'
+    env = parse_envelope(line)
+    assert isinstance(env, NotificationActionMsg)
+    assert env.data.id == "n2"
+
+
 def test_parse_todo_clicked() -> None:
     line = '{"v":1,"type":"todo_clicked","data":{"id":"t1"}}'
     env = parse_envelope(line)

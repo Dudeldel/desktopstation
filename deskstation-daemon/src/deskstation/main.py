@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+import subprocess
 from pathlib import Path
 
 import structlog
@@ -15,6 +16,9 @@ from deskstation.bridge.protocol import (
     FullscreenDismissMsg,
     HeartbeatMsg,
     HelloMsg,
+    MeetingJoinMsg,
+    NotificationActionMsg,
+    NotificationClickedMsg,
     PomodoroActionMsg,
     ScreenChangedMsg,
     TaskClickedMsg,
@@ -53,11 +57,26 @@ def _build_bridge(cfg: Config) -> BridgeProtocol:
     return SerialBridge(factory, reconnect_interval_sec=cfg.serial.reconnect_interval_sec)
 
 
+async def _xdg_open(url: str) -> None:
+    """Run ``xdg-open <url>`` off the event loop, logging any errors.
+
+    ``check=False`` keeps non-zero exits from bubbling as exceptions —
+    xdg-open's exit codes vary by handler and a failure here shouldn't
+    crash the dispatcher.
+    """
+    try:
+        await asyncio.to_thread(subprocess.run, ["xdg-open", url], check=False)
+    except Exception as exc:
+        log.warning("xdg_open_failed", url=url, error=str(exc))
+
+
 async def _dispatch(
     bridge: BridgeProtocol,
     monitor: ConnectionMonitor,
     ui_state: UIState,
     pomodoro: PomodoroEngine,
+    merger: Screen2Merger | None = None,
+    calendar_poller: CalendarPoller | None = None,
 ) -> None:
     was_connected = monitor.is_connected
     async for env in bridge.stream():
@@ -98,6 +117,34 @@ async def _dispatch(
             # Dismissing a break overlay short-circuits the break (same as skip_break).
             log.info("fullscreen_dismissed", kind=env.data.kind)
             pomodoro.skip_break()
+        elif isinstance(env, NotificationActionMsg | NotificationClickedMsg):
+            # NotificationClickedMsg is the legacy M2 name; firmware still
+            # emits it. Both resolve to the same lookup-then-xdg-open path.
+            notification_id = env.data.id
+            if merger is None:
+                log.warning(
+                    "notification_action_no_merger",
+                    notification_id=notification_id,
+                )
+            else:
+                url = merger.lookup_url(notification_id)
+                if url is None:
+                    log.warning(
+                        "notification_action_unknown_id",
+                        notification_id=notification_id,
+                    )
+                else:
+                    await _xdg_open(url)
+        elif isinstance(env, MeetingJoinMsg):
+            meeting_id = env.data.id
+            if calendar_poller is None:
+                log.warning("meeting_join_no_calendar", meeting_id=meeting_id)
+            else:
+                url = calendar_poller.lookup_meeting_url(meeting_id)
+                if url is None:
+                    log.warning("meeting_join_unknown_id", meeting_id=meeting_id)
+                else:
+                    await _xdg_open(url)
         else:
             log.warning("unknown_envelope_type")
 
@@ -299,7 +346,16 @@ async def _run() -> None:
 
     tasks = [
         asyncio.create_task(heartbeat_sender(bridge, interval_sec=cfg.heartbeat.interval_sec)),
-        asyncio.create_task(_dispatch(bridge, monitor, ui_state, pomodoro)),
+        asyncio.create_task(
+            _dispatch(
+                bridge,
+                monitor,
+                ui_state,
+                pomodoro,
+                merger=screen2_merger,
+                calendar_poller=calendar_poller,
+            )
+        ),
         asyncio.create_task(monitor.watchdog()),
         pomodoro.start(),
         *mock_tasks,

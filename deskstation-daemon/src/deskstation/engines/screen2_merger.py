@@ -47,6 +47,12 @@ class Screen2Merger:
     def __init__(self, ui_state: UIState) -> None:
         self._ui = ui_state
         self._by_source: dict[str, list[Notification]] = {}
+        # Parallel index of (notification_id -> action_url). The
+        # :class:`Notification` model itself doesn't carry an action URL
+        # (M2 simplification), so sources register URLs alongside their
+        # ``update()`` calls. The dispatcher uses :meth:`lookup_url` to
+        # resolve ``notification_action`` events from the firmware.
+        self._url_index: dict[str, str] = {}
 
     def update(self, source_key: str, notifications: list[Notification]) -> None:
         """Replace this source's notifications and re-emit screen_2."""
@@ -56,6 +62,20 @@ class Screen2Merger:
     def refresh(self) -> None:
         """Re-merge and re-emit without changing any source's contents."""
         self._emit()
+
+    def lookup_url(self, notification_id: str) -> str | None:
+        """Return the action URL for a notification id, or None if not found.
+
+        The Notification model doesn't carry an action_url field (M2
+        simplification), so we maintain a parallel index of
+        ``(notification_id -> url)`` populated by sources that have URLs
+        to offer.
+        """
+        return self._url_index.get(notification_id)
+
+    def register_url(self, notification_id: str, url: str) -> None:
+        """Sources call this to register an action URL alongside an update()."""
+        self._url_index[notification_id] = url
 
     def _priority_rank(self, source_key: str) -> int:
         try:
@@ -82,4 +102,12 @@ class Screen2Merger:
         # Sort by (priority_rank, in_source_index) for a deterministic order.
         sorted_entries = sorted(dedup.values(), key=lambda e: (e[0], e[1]))
 
-        return [e[2] for e in sorted_entries[: self.MAX_ITEMS]]
+        merged = [e[2] for e in sorted_entries[: self.MAX_ITEMS]]
+
+        # Prune the url index: drop any entry whose notification id is no
+        # longer in the merged result. Otherwise the index grows unbounded
+        # as sources replace their lists over time.
+        surviving_ids = {n.id for n in merged}
+        self._url_index = {nid: url for nid, url in self._url_index.items() if nid in surviving_ids}
+
+        return merged

@@ -99,6 +99,12 @@ class GmailPoller(MockPoller):
         # tests, manual experiments), keep the direct push so the poller
         # is still usable on its own.
         if self._merger is not None:
+            # M5.7: register a deep-link to the Gmail web UI for each
+            # message so a notification_action event from the firmware
+            # can xdg-open the right URL. Register BEFORE update() so the
+            # post-update prune doesn't drop entries we just added.
+            for m in messages:
+                self._merger.register_url(m.id, f"https://mail.google.com/mail/u/0/#inbox/{m.id}")
             self._merger.update("gmail", list(self._latest))
         else:
             self.ui_state.set_screen_2(notifications=list(self._latest))

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 import structlog
 
@@ -135,6 +136,20 @@ class GoogleChatPoller(MockPoller):
         # tests, manual experiments), keep the direct push so the poller
         # is still usable on its own.
         if self._merger is not None:
+            # M5.7: register a deep-link to the Chat space (no per-message
+            # deep link exists). The space name contains a ``/`` (e.g.
+            # ``spaces/AAAA``) that must be percent-encoded for the URL.
+            # Register BEFORE update() so the post-update prune doesn't
+            # drop entries we just added.
+            for notif in self._latest:
+                # ``notif.id`` is the message resource name
+                # ``spaces/<space>/messages/<id>``; take the space part.
+                parts = notif.id.split("/messages/", 1)
+                space_name = parts[0]
+                encoded = quote(space_name, safe="")
+                self._merger.register_url(
+                    notif.id, f"https://mail.google.com/chat/u/0/#chat/{encoded}"
+                )
             self._merger.update("gchat", list(self._latest))
         else:
             self.ui_state.set_screen_2(notifications=list(self._latest))
