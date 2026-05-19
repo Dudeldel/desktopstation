@@ -60,11 +60,12 @@ def _make_client(tmp_path: Path) -> tuple[JiraClient, ApiCache]:
     return client, cache
 
 
-def _search_cache_key(jql: str, max_results: int) -> str:
+def _search_cache_key(jql: str, fields: list[str], max_results: int) -> str:
     import hashlib
 
-    h = hashlib.sha256(jql.encode()).hexdigest()[:16]
-    return f"jira:search:{h}:{max_results}"
+    jql_hash = hashlib.sha256(jql.encode()).hexdigest()[:16]
+    fields_hash = hashlib.sha256(",".join(sorted(fields)).encode()).hexdigest()[:8]
+    return f"jira:search:{jql_hash}:{fields_hash}:{max_results}"
 
 
 async def test_search_success_returns_issues(tmp_path: Path) -> None:
@@ -105,7 +106,7 @@ async def test_search_caches_successful_response(tmp_path: Path) -> None:
             )
             await client.search("project = DEV", ["summary"])
 
-        entry = cache.get(_search_cache_key("project = DEV", 50))
+        entry = cache.get(_search_cache_key("project = DEV", ["summary"], 50))
         assert entry is not None
         payload, _ = entry
         assert json.loads(payload) == _SEARCH_PAYLOAD
@@ -116,7 +117,7 @@ async def test_search_caches_successful_response(tmp_path: Path) -> None:
 async def test_search_500_falls_back_to_cache(tmp_path: Path) -> None:
     client, cache = _make_client(tmp_path)
     cache.put(
-        _search_cache_key("project = DEV", 50),
+        _search_cache_key("project = DEV", ["summary"], 50),
         json.dumps(_SEARCH_PAYLOAD).encode(),
     )
     try:
@@ -124,9 +125,22 @@ async def test_search_500_falls_back_to_cache(tmp_path: Path) -> None:
             router.post("/rest/api/3/search/jql").mock(return_value=httpx.Response(500))
             issues = await client.search("project = DEV", ["summary"])
 
-        assert len(issues) == 2
-        assert issues[0].key == "DEV-1"
-        assert issues[1].assignee_email is None
+        assert issues == [
+            Issue(
+                key="DEV-1",
+                summary="Fix bug",
+                status="In Progress",
+                status_category="In Progress",
+                assignee_email="alice@example.com",
+            ),
+            Issue(
+                key="DEV-2",
+                summary="New feature",
+                status="To Do",
+                status_category="To Do",
+                assignee_email=None,
+            ),
+        ]
     finally:
         await client.aclose()
 
@@ -145,7 +159,7 @@ async def test_search_500_no_cache_raises_transient(tmp_path: Path) -> None:
 async def test_search_401_raises_auth_error(tmp_path: Path) -> None:
     client, cache = _make_client(tmp_path)
     cache.put(
-        _search_cache_key("project = DEV", 50),
+        _search_cache_key("project = DEV", ["summary"], 50),
         json.dumps(_SEARCH_PAYLOAD).encode(),
     )
     try:

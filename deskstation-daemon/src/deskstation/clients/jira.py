@@ -117,10 +117,7 @@ class JiraClient:
             self._http = http_client
             self._owns_http = False
         else:
-            self._http = httpx.AsyncClient(
-                auth=self._auth,
-                timeout=httpx.Timeout(10.0),
-            )
+            self._http = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
             self._owns_http = True
 
     async def aclose(self) -> None:
@@ -136,7 +133,8 @@ class JiraClient:
         url = f"{self._base_url}/rest/api/3/search/jql"
         body: dict[str, Any] = {"jql": jql, "fields": fields, "maxResults": max_results}
         jql_hash = hashlib.sha256(jql.encode()).hexdigest()[:16]
-        cache_key = f"jira:search:{jql_hash}:{max_results}"
+        fields_hash = hashlib.sha256(",".join(sorted(fields)).encode()).hexdigest()[:8]
+        cache_key = f"jira:search:{jql_hash}:{fields_hash}:{max_results}"
 
         try:
             response = await self._http.post(url, json=body, auth=self._auth)
