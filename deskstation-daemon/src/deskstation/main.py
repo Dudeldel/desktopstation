@@ -6,6 +6,7 @@ from pathlib import Path
 
 import structlog
 
+from deskstation import auth_google
 from deskstation.bridge.heartbeat import ConnectionMonitor, heartbeat_sender
 from deskstation.bridge.interface import BridgeProtocol
 from deskstation.bridge.mock_bridge import MockBridge
@@ -21,11 +22,13 @@ from deskstation.bridge.protocol import (
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
 from deskstation.clients.bitbucket import BitbucketClient
+from deskstation.clients.gmail import GmailClient
 from deskstation.clients.jira import JiraClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
+from deskstation.pollers.gmail import GmailPoller
 from deskstation.pollers.jira import JiraPoller
 from deskstation.pollers.mock import start_all_mocks
 from deskstation.secrets import load_secrets
@@ -166,6 +169,17 @@ async def _run() -> None:
             interval_sec=cfg.bitbucket.poll_interval_sec,
         )
 
+    gmail_poller: GmailPoller | None = None
+    if cfg.gmail.enabled:
+        google_creds = auth_google.load_credentials()
+        if google_creds is not None:
+            gmail_client = GmailClient(google_creds, cache)
+            gmail_poller = GmailPoller(
+                ui_state,
+                gmail_client,
+                interval_sec=cfg.gmail.poll_interval_sec,
+            )
+
     pomodoro = PomodoroEngine(
         ui_state,
         pomodoro_store,
@@ -180,6 +194,8 @@ async def _run() -> None:
         skip.add("screen_1")
     if bitbucket_poller is not None:
         skip.add("screen_3")
+    if gmail_poller is not None:
+        skip.add("screen_2")
     if skip:
         log.info("mocks_skip_applied", skip=sorted(skip))
 
@@ -208,6 +224,8 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(jira_poller.run_forever()))
     if bitbucket_poller is not None:
         tasks.append(asyncio.create_task(bitbucket_poller.run_forever()))
+    if gmail_poller is not None:
+        tasks.append(asyncio.create_task(gmail_poller.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")

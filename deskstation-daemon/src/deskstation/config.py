@@ -53,6 +53,12 @@ class BitbucketPollerConfig(BaseModel):
     enabled: bool = True
 
 
+class GmailPollerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+    poll_interval_sec: float = 60.0
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
@@ -62,6 +68,7 @@ class Config(BaseModel):
     mock: MockConfig = Field(default_factory=MockConfig)
     jira: JiraPollerConfig = Field(default_factory=JiraPollerConfig)
     bitbucket: BitbucketPollerConfig = Field(default_factory=BitbucketPollerConfig)
+    gmail: GmailPollerConfig = Field(default_factory=GmailPollerConfig)
 
 
 def load_config(path: Path | None = None) -> Config:
