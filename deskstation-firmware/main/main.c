@@ -50,11 +50,14 @@ static void send_line(const char *line)
 static void ui_dispatch_task(void *arg)
 {
     (void)arg;
-    usb_line_t line;
+    // Off-stack: usb_line_t (~4 KB) + parsed_msg_t (~4.5 KB; union sized for
+    // screen2_payload_t = 16 notifications) overflow the 8 KB task stack.
+    // The task is single-threaded so plain static storage is safe.
+    static usb_line_t line;
+    static parsed_msg_t msg;
     while (1) {
         if (xQueueReceive(usb_cdc_rx_queue(), &line, portMAX_DELAY) != pdTRUE) continue;
 
-        parsed_msg_t msg;
         if (!protocol_parse(line.data, &msg)) continue;
 
         s_last_rx_ms = now_ms();

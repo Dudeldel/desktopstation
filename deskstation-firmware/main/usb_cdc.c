@@ -16,6 +16,11 @@ static QueueHandle_t s_tx_queue;
 static char s_rx_buf[USB_LINE_MAX_LEN];
 static size_t s_rx_len;
 
+// Off-stack: usb_line_t (4 KB) on the TinyUSB driver task's 4 KB stack
+// overflowed during heavy mock traffic. on_cdc_rx is serialized by TinyUSB
+// internally, so a module-static buffer is safe.
+static usb_line_t s_rx_line;
+
 static void on_cdc_rx(int itf, cdcacm_event_t *event)
 {
     (void)itf;
@@ -27,11 +32,10 @@ static void on_cdc_rx(int itf, cdcacm_event_t *event)
             char c = (char)chunk[i];
             if (c == '\n') {
                 if (s_rx_len > 0 && s_rx_buf[s_rx_len - 1] == '\r') s_rx_len--;
-                usb_line_t line;
-                memcpy(line.data, s_rx_buf, s_rx_len);
-                line.data[s_rx_len] = '\0';
-                line.len = s_rx_len;
-                if (xQueueSend(s_rx_queue, &line, 0) != pdTRUE) {
+                memcpy(s_rx_line.data, s_rx_buf, s_rx_len);
+                s_rx_line.data[s_rx_len] = '\0';
+                s_rx_line.len = s_rx_len;
+                if (xQueueSend(s_rx_queue, &s_rx_line, 0) != pdTRUE) {
                     ESP_LOGW(TAG, "rx queue full, dropped line");
                 }
                 s_rx_len = 0;
@@ -45,13 +49,15 @@ static void on_cdc_rx(int itf, cdcacm_event_t *event)
     }
 }
 
+// Off-stack — tx_task is single-threaded so static storage is fine.
+static usb_line_t s_tx_line;
+
 static void tx_task(void *arg)
 {
     (void)arg;
-    usb_line_t line;
     while (1) {
-        if (xQueueReceive(s_tx_queue, &line, portMAX_DELAY) == pdTRUE) {
-            tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)line.data, line.len);
+        if (xQueueReceive(s_tx_queue, &s_tx_line, portMAX_DELAY) == pdTRUE) {
+            tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)s_tx_line.data, s_tx_line.len);
             const char nl = '\n';
             tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)&nl, 1);
             tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
