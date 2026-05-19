@@ -7,6 +7,7 @@ idf_component_register(
         "ui_state.c"
         "ui/carousel.c"
         "ui/dots.c"
+        "ui/fullscreen_overlay.c"
         "ui/pomodoro_overlay.c"
         "ui/screen_1.c"
         "ui/screen_2.c"

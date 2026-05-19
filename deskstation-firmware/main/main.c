@@ -5,6 +5,7 @@
 #include "toast.h"
 #include "top_bar.h"
 #include "carousel.h"
+#include "fullscreen_overlay.h"
 #include "pomodoro_overlay.h"
 #include "screen_1.h"
 #include "screen_2.h"
@@ -90,19 +91,25 @@ static void ui_dispatch_task(void *arg)
             case MSG_SCREEN_4:
                 screen_4_update(&msg.data.screen_4);
                 break;
-            case MSG_POMODORO_STATE:
+            case MSG_POMODORO_STATE: {
+                pomo_state_t st = msg.data.pomo_state.state;
                 pomodoro_overlay_update(&msg.data.pomo_state);
-                if (msg.data.pomo_state.state == POMO_ACTIVE
-                        || msg.data.pomo_state.state == POMO_PAUSED) {
+                // If we left a break (or never were in one), hide the break
+                // overlay. Break overlay only stays up while state is in a
+                // break or while the engine is silent between transitions.
+                if (st != POMO_SHORT_BREAK && st != POMO_LONG_BREAK) {
+                    fullscreen_overlay_hide();
+                }
+                if (st == POMO_ACTIVE || st == POMO_PAUSED
+                        || st == POMO_SHORT_BREAK || st == POMO_LONG_BREAK) {
                     carousel_autoscroll_pause();
                 } else {
                     carousel_autoscroll_resume();
                 }
                 break;
+            }
             case MSG_FULLSCREEN:
-                // M3.6 will wire fullscreen_overlay_update here; for now log.
-                ESP_LOGD(TAG, "fullscreen kind=%d title=%s",
-                    (int)msg.data.fullscreen.kind, msg.data.fullscreen.title);
+                fullscreen_overlay_show(&msg.data.fullscreen);
                 carousel_autoscroll_pause();
                 break;
             case MSG_HELLO:
