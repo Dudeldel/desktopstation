@@ -59,6 +59,16 @@ class GmailPollerConfig(BaseModel):
     poll_interval_sec: float = 60.0
 
 
+class GoogleChatPollerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+    poll_interval_sec: float = 60.0
+    # ``my_email`` is the user's primary Google account email — used as the
+    # @-mention heuristic key (local-part) and to detect DMs. The poller
+    # only activates when this is non-empty (no sensible default).
+    my_email: str = ""
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
@@ -69,6 +79,7 @@ class Config(BaseModel):
     jira: JiraPollerConfig = Field(default_factory=JiraPollerConfig)
     bitbucket: BitbucketPollerConfig = Field(default_factory=BitbucketPollerConfig)
     gmail: GmailPollerConfig = Field(default_factory=GmailPollerConfig)
+    gchat: GoogleChatPollerConfig = Field(default_factory=GoogleChatPollerConfig)
 
 
 def load_config(path: Path | None = None) -> Config:

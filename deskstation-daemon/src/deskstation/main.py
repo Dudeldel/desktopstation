@@ -22,12 +22,14 @@ from deskstation.bridge.protocol import (
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
 from deskstation.clients.bitbucket import BitbucketClient
+from deskstation.clients.gchat import GoogleChatClient
 from deskstation.clients.gmail import GmailClient
 from deskstation.clients.jira import JiraClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
+from deskstation.pollers.gchat import GoogleChatPoller
 from deskstation.pollers.gmail import GmailPoller
 from deskstation.pollers.jira import JiraPoller
 from deskstation.pollers.mock import start_all_mocks
@@ -169,16 +171,40 @@ async def _run() -> None:
             interval_sec=cfg.bitbucket.poll_interval_sec,
         )
 
-    gmail_poller: GmailPoller | None = None
-    if cfg.gmail.enabled:
+    # Load Google OAuth credentials once and share across Gmail + Chat
+    # (+ Calendar in M5.6). ``load_credentials()`` is cheap when a token
+    # file is missing (returns None immediately).
+    google_creds = None
+    if cfg.gmail.enabled or cfg.gchat.enabled:
         google_creds = auth_google.load_credentials()
-        if google_creds is not None:
-            gmail_client = GmailClient(google_creds, cache)
-            gmail_poller = GmailPoller(
-                ui_state,
-                gmail_client,
-                interval_sec=cfg.gmail.poll_interval_sec,
-            )
+
+    gmail_poller: GmailPoller | None = None
+    if google_creds is not None and cfg.gmail.enabled:
+        gmail_client = GmailClient(google_creds, cache)
+        gmail_poller = GmailPoller(
+            ui_state,
+            gmail_client,
+            interval_sec=cfg.gmail.poll_interval_sec,
+        )
+
+    gchat_poller: GoogleChatPoller | None = None
+    if google_creds is not None and cfg.gchat.enabled and cfg.gchat.my_email:
+        gchat_client = GoogleChatClient(
+            google_creds,
+            cache,
+            my_email=cfg.gchat.my_email,
+        )
+        gchat_poller = GoogleChatPoller(
+            ui_state,
+            gchat_client,
+            my_email=cfg.gchat.my_email,
+            interval_sec=cfg.gchat.poll_interval_sec,
+        )
+    # TODO(M5.5): Screen2Merger will replace direct ``set_screen_2`` calls
+    # from Gmail / Chat / dbus pollers. Today Gmail and Chat both write
+    # screen_2 independently — last writer wins, which is a temporary
+    # known issue. M5.5 introduces an aggregator that merges
+    # ``latest_notifications()`` from each source.
 
     pomodoro = PomodoroEngine(
         ui_state,
@@ -195,6 +221,8 @@ async def _run() -> None:
     if bitbucket_poller is not None:
         skip.add("screen_3")
     if gmail_poller is not None:
+        skip.add("screen_2")
+    if gchat_poller is not None:
         skip.add("screen_2")
     if skip:
         log.info("mocks_skip_applied", skip=sorted(skip))
@@ -226,6 +254,8 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(bitbucket_poller.run_forever()))
     if gmail_poller is not None:
         tasks.append(asyncio.create_task(gmail_poller.run_forever()))
+    if gchat_poller is not None:
+        tasks.append(asyncio.create_task(gchat_poller.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")
