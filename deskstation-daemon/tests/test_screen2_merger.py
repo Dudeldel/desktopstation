@@ -52,24 +52,57 @@ async def test_single_source_push_emits_to_ui() -> None:
     assert [n.id for n in msg.data.notifications] == ["m1", "m2"]
 
 
-async def test_two_sources_dedupe_by_id_keeps_higher_priority() -> None:
+async def test_within_source_dedupe_by_id_last_write_wins() -> None:
+    """Re-updating the same source with the same id replaces the prior entry.
+
+    Dedup is scoped to ``(source_key, id)``: two calls to ``update`` for
+    the same source key replace that source's list entirely, so the second
+    push wins.
+    """
     bridge = MockBridge()
     ui = UIState(bridge)
     merger = Screen2Merger(ui)
 
-    n_gmail = _n("x", source="gmail", sender="from_gmail")
-    n_dbus = _n("x", source="system", sender="from_dbus")
+    n_first = _n("x", source="gmail", sender="first")
+    n_second = _n("x", source="gmail", sender="second")
 
-    # gmail pushes first; then dbus pushes with same id — dbus has higher
-    # priority, so the merged result keeps the dbus version.
+    merger.update("gmail", [n_first])
+    await bridge.received()  # drain the first emission
+    merger.update("gmail", [n_second])
+
+    msg = await bridge.received()
+    assert isinstance(msg, Screen2Msg)
+    assert len(msg.data.notifications) == 1
+    assert msg.data.notifications[0].sender == "second"
+
+
+async def test_dedup_is_scoped_to_source() -> None:
+    """Different sources can emit notifications with the same id without collision.
+
+    Dedup is keyed on ``(source_key, id)`` so cross-source id collisions
+    (e.g. dbus and gmail both emitting id="1") do not shadow each other —
+    both survive into the merged output.
+    """
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    merger = Screen2Merger(ui)
+
+    n_gmail = _n("X", source="gmail", sender="from_gmail")
+    n_dbus = _n("X", source="system", sender="from_dbus")
+
     merger.update("gmail", [n_gmail])
     await bridge.received()  # drain the gmail-only emission
     merger.update("dbus", [n_dbus])
 
     msg = await bridge.received()
     assert isinstance(msg, Screen2Msg)
-    assert len(msg.data.notifications) == 1
+    # Both survive — same id, different source → no shadow.
+    assert len(msg.data.notifications) == 2
+    senders = {n.sender for n in msg.data.notifications}
+    assert senders == {"from_gmail", "from_dbus"}
+    # dbus ranks above gmail, so it appears first.
     assert msg.data.notifications[0].sender == "from_dbus"
+    assert msg.data.notifications[1].sender == "from_gmail"
 
 
 async def test_source_priority_order() -> None:

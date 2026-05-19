@@ -7,10 +7,11 @@ caused last-writer-wins clobbering. This engine becomes the single owner
 of the ``screen_2`` dispatch:
 
 * Each source pushes its current list via :meth:`Screen2Merger.update`.
-* The merger combines the per-source lists, dedupes by ``id`` keeping the
-  entry from the highest-priority source, sorts by
-  ``(source_priority, in_source_index)``, caps the result at
-  :attr:`MAX_ITEMS`, and calls :meth:`UIState.set_screen_2` exactly once.
+* The merger combines the per-source lists, dedupes by
+  ``(source_key, id)`` (so two sources can emit the same id without
+  shadowing each other), sorts by ``(source_priority, in_source_index)``,
+  caps the result at :attr:`MAX_ITEMS`, and calls
+  :meth:`UIState.set_screen_2` exactly once.
 
 Source priority is defined by :attr:`Screen2Merger._priority` and ranks
 dbus (real-time desktop notifications) above polled sources (Gmail,
@@ -67,29 +68,18 @@ class Screen2Merger:
         self._ui.set_screen_2(notifications=merged)
 
     def _merge(self) -> list[Notification]:
-        # Build a list of (priority_rank, in_source_index, source_key, Notification)
-        # for every notification across all sources.
-        entries: list[tuple[int, int, str, Notification]] = []
+        # Dedup is scoped per source: the key is ``(source_key, id)`` so two
+        # different sources emitting the same id string (e.g. "1") don't
+        # shadow each other. Within a single source, last write wins on an
+        # id collision — which shouldn't happen anyway given each source
+        # emits its own id space.
+        dedup: dict[tuple[str, str], tuple[int, int, Notification]] = {}
         for source_key, lst in self._by_source.items():
             rank = self._priority_rank(source_key)
             for idx, notification in enumerate(lst):
-                entries.append((rank, idx, source_key, notification))
-
-        # Dedup by id, keeping the entry with the LOWEST priority rank
-        # (i.e. highest-priority source). On ties, keep the earlier
-        # in-source-index (more recent within that source).
-        best: dict[str, tuple[int, int, str, Notification]] = {}
-        for entry in entries:
-            rank, idx, _src, notification = entry
-            prev = best.get(notification.id)
-            if prev is None:
-                best[notification.id] = entry
-                continue
-            prev_rank, prev_idx, _, _ = prev
-            if (rank, idx) < (prev_rank, prev_idx):
-                best[notification.id] = entry
+                dedup[(source_key, notification.id)] = (rank, idx, notification)
 
         # Sort by (priority_rank, in_source_index) for a deterministic order.
-        sorted_entries = sorted(best.values(), key=lambda e: (e[0], e[1]))
+        sorted_entries = sorted(dedup.values(), key=lambda e: (e[0], e[1]))
 
-        return [e[3] for e in sorted_entries[: self.MAX_ITEMS]]
+        return [e[2] for e in sorted_entries[: self.MAX_ITEMS]]

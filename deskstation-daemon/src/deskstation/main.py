@@ -228,10 +228,18 @@ async def _run() -> None:
     # reads ``snapshot()`` and pushes it. A snapshot is a small in-memory
     # deque copy — negligible cost. A proper callback-driven path can come
     # later if 1 Hz proves too coarse.
+    #
+    # ``dbus_listener`` is captured by closure and is guaranteed non-None
+    # here because the task below is only scheduled inside the
+    # ``if dbus_listener is not None`` branch, and the local is never
+    # reassigned after task creation. So no None-guard is needed.
     async def _dbus_to_merger() -> None:
+        assert dbus_listener is not None  # for mypy; see comment above
         while True:
-            if dbus_listener is not None:
+            try:
                 screen2_merger.update("dbus", dbus_listener.snapshot())
+            except Exception as exc:
+                log.warning("dbus_to_merger_failed", error=str(exc))
             await asyncio.sleep(1.0)
 
     pomodoro = PomodoroEngine(
