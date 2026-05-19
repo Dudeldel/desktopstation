@@ -289,16 +289,24 @@ class Screen4Poller(MockPoller):
 def start_all_mocks(
     ui_state: UIState,
     interval_sec: float = 5.0,
+    *,
+    skip: set[str] | None = None,
 ) -> list[asyncio.Task[None]]:
     """Instantiate one poller per screen and start each as an asyncio Task.
 
+    `skip` is an optional set of screen keys to omit (valid keys:
+    ``"top_bar"``, ``"screen_1"``, ``"screen_2"``, ``"screen_3"``,
+    ``"screen_4"``). Unknown keys are silently ignored. When ``skip`` is
+    ``None`` all five mock pollers are started — the default M2-era behaviour.
+
     Returns the list of Task handles for cancellation on shutdown.
     """
-    pollers: list[MockPoller] = [
-        TopBarPoller(ui_state, interval_sec),
-        Screen1Poller(ui_state, interval_sec),
-        Screen2Poller(ui_state, interval_sec),
-        Screen3Poller(ui_state, interval_sec),
-        Screen4Poller(ui_state, interval_sec),
+    skip = skip or set()
+    candidates: list[tuple[str, MockPoller]] = [
+        ("top_bar", TopBarPoller(ui_state, interval_sec)),
+        ("screen_1", Screen1Poller(ui_state, interval_sec)),
+        ("screen_2", Screen2Poller(ui_state, interval_sec)),
+        ("screen_3", Screen3Poller(ui_state, interval_sec)),
+        ("screen_4", Screen4Poller(ui_state, interval_sec)),
     ]
-    return [asyncio.create_task(p.run_forever()) for p in pollers]
+    return [asyncio.create_task(p.run_forever()) for key, p in candidates if key not in skip]

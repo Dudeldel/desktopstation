@@ -158,10 +158,24 @@ async def _run() -> None:
         worklog=jira_client.add_worklog if jira_client is not None else None,
     )
 
+    # When real pollers are active, suppress the matching M2 mock pollers so
+    # they don't overwrite real screen data with synthetic fixtures.
+    skip: set[str] = set()
+    if jira_poller is not None:
+        skip.add("screen_1")
+    if bitbucket_poller is not None:
+        skip.add("screen_3")
+    if skip:
+        log.info("mocks_skip_applied", skip=sorted(skip))
+
     mock_tasks: list[asyncio.Task[None]] = []
     if cfg.mock.enabled:
         log.info("starting_mock_pollers", interval_sec=cfg.mock.interval_sec)
-        mock_tasks = start_all_mocks(ui_state, interval_sec=cfg.mock.interval_sec)
+        mock_tasks = start_all_mocks(
+            ui_state,
+            interval_sec=cfg.mock.interval_sec,
+            skip=skip,
+        )
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
