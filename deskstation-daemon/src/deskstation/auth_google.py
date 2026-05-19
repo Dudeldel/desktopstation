@@ -36,7 +36,7 @@ def run_oauth_flow(
     client_path: Path | None = None,
     token_path: Path | None = None,
     *,
-    flow_factory: Callable[..., Any] | None = None,
+    flow_factory: Callable[[Path, list[str]], Any] | None = None,
 ) -> None:
     """Run the OAuth2 installed-app flow and persist the refresh token.
 
@@ -46,6 +46,9 @@ def run_oauth_flow(
     The ``flow_factory`` hook lets tests inject a fake flow; production code
     uses :class:`InstalledAppFlow.from_client_secrets_file`.
     """
+    # Exit codes used here:
+    #   2 - missing client.json (bad setup / input)
+    #   3 - flow or load_credentials failure (runtime error, e.g. corrupt token)
     resolved_client = client_path if client_path is not None else _DEFAULT_CLIENT_PATH
     resolved_token = token_path if token_path is not None else _DEFAULT_TOKEN_PATH
 
@@ -84,8 +87,13 @@ def run_oauth_flow(
 
         creds = flow.run_local_server(port=0, open_browser=True)
         resolved_token.parent.mkdir(parents=True, exist_ok=True)
-        resolved_token.write_text(creds.to_json())
-        os.chmod(resolved_token, 0o600)
+        fd = os.open(resolved_token, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(creds.to_json())
+        finally:
+            # Belt-and-suspenders: umask may relax the mode.
+            os.chmod(resolved_token, 0o600)
         print(f"Google credentials saved to {resolved_token} (scopes: {', '.join(_SCOPES)})")
     except SystemExit:
         raise
@@ -117,9 +125,16 @@ def load_credentials(token_path: Path | None = None) -> Any | None:
     creds = Credentials.from_authorized_user_file(str(resolved), _SCOPES)  # type: ignore[no-untyped-call]
     if not creds.valid and creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        tmp = resolved.with_suffix(".json.tmp")
-        tmp.write_text(creds.to_json())
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, resolved)
+        tmp = resolved.parent / (resolved.name + ".tmp")
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(creds.to_json())
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, resolved)
+        except Exception:
+            # Don't leak a partial tmp file if write/replace failed midway.
+            tmp.unlink(missing_ok=True)
+            raise
         _log.info("google_token_refreshed", path=str(resolved))
     return creds

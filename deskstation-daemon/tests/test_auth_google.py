@@ -145,6 +145,16 @@ def test_load_credentials_no_refresh_when_valid(tmp_path: Path) -> None:
     assert token_path.read_text() == original
 
 
+def test_corrupt_token_file_exits_3(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    client = tmp_path / "client.json"
+    client.write_text("{}")
+    token = tmp_path / "token.json"
+    token.write_text("not json")
+    with pytest.raises(SystemExit) as excinfo:
+        auth_google.run_oauth_flow(client_path=client, token_path=token)
+    assert excinfo.value.code == 3
+
+
 def test_token_with_no_refresh_token_still_runs_flow(tmp_path: Path) -> None:
     """If a token exists but isn't valid and has no refresh_token, re-run the flow."""
     client_path = tmp_path / "client.json"
