@@ -59,7 +59,7 @@ class ApiCache:
         if row is None:
             return None
         payload, fetched_at = row
-        return bytes(payload), datetime.fromisoformat(fetched_at)
+        return payload, datetime.fromisoformat(fetched_at)
 
     def age_sec(self, key: str) -> float | None:
         entry = self.get(key)
