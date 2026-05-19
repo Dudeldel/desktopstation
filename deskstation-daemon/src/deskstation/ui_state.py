@@ -10,11 +10,13 @@ from typing import TYPE_CHECKING
 import structlog
 
 from deskstation.bridge.protocol import (
+    FullscreenData,
+    FullscreenMsg,
     JiraTask,
     MeetingBar,
     Notification,
-    PomodoroFullscreenData,
-    PomodoroFullscreenMsg,
+    PomodoroStateData,
+    PomodoroStateMsg,
     PullRequest,
     Screen1Data,
     Screen1Msg,
@@ -59,7 +61,8 @@ class UIState:
         self._screen_2 = Screen2Data()
         self._screen_3 = Screen3Data()
         self._screen_4 = Screen4Data()
-        self._pomodoro_overlay = PomodoroFullscreenData(visible=False)
+        self._pomodoro_state = PomodoroStateData(state="idle")
+        self._fullscreen: FullscreenData | None = None
 
     # ---- setters ----
 
@@ -99,9 +102,16 @@ class UIState:
         self._screen_4.items = items
         self._schedule_send("screen_4")
 
-    def set_pomodoro_overlay(self, data: PomodoroFullscreenData) -> None:
-        self._pomodoro_overlay = data
-        self._schedule_send("pomodoro_fullscreen")
+    def set_pomodoro_state(self, data: PomodoroStateData) -> None:
+        self._pomodoro_state = data
+        self._schedule_send("pomodoro_state")
+
+    def set_fullscreen(self, data: FullscreenData | None) -> None:
+        """Set or clear the break/reminder overlay. None clears (no message sent;
+        firmware dismisses via fullscreen_dismiss feedback)."""
+        self._fullscreen = data
+        if data is not None:
+            self._schedule_send("fullscreen")
 
     # ---- dispatch ----
 
@@ -116,8 +126,12 @@ class UIState:
             return Screen3Msg(data=self._screen_3)
         if key == "screen_4":
             return Screen4Msg(data=self._screen_4)
-        if key == "pomodoro_fullscreen":
-            return PomodoroFullscreenMsg(data=self._pomodoro_overlay)
+        if key == "pomodoro_state":
+            return PomodoroStateMsg(data=self._pomodoro_state)
+        if key == "fullscreen":
+            if self._fullscreen is None:
+                raise ValueError("fullscreen requested but none set")
+            return FullscreenMsg(data=self._fullscreen)
         raise ValueError(f"unknown key: {key}")
 
     def _schedule_send(self, key: str) -> None:
@@ -139,15 +153,20 @@ class UIState:
             log.warning("ui_state_send_failed", screen=key, error=str(e))
 
     async def resend_all(self) -> None:
-        """Push current state for every screen + top_bar. Use on reconnect."""
-        for key in (
+        """Push current state for every screen + top_bar + pomodoro_state. Use on reconnect.
+
+        fullscreen is not resent — if a break overlay was active and the link
+        dropped, the engine will re-trigger it through its own state ticks.
+        """
+        keys = (
             "top_bar",
             "screen_1",
             "screen_2",
             "screen_3",
             "screen_4",
-            "pomodoro_fullscreen",
-        ):
+            "pomodoro_state",
+        )
+        for key in keys:
             try:
                 await self._bridge.send(self._build_msg(key))  # type: ignore[arg-type]
                 self._last_send[key] = time.monotonic()

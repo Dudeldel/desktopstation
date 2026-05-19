@@ -4,11 +4,13 @@ import asyncio
 
 from deskstation.bridge.mock_bridge import MockBridge
 from deskstation.bridge.protocol import (
+    FullscreenData,
+    FullscreenMsg,
     JiraTask,
     MeetingBar,
     Notification,
-    PomodoroFullscreenData,
-    PomodoroFullscreenMsg,
+    PomodoroStateData,
+    PomodoroStateMsg,
     PullRequest,
     Screen1Msg,
     Screen2Msg,
@@ -108,15 +110,37 @@ async def test_set_screen_4_dispatches() -> None:
     assert msg.data.items[0].id == "t1"
 
 
-async def test_set_pomodoro_overlay_dispatches() -> None:
+async def test_set_pomodoro_state_dispatches() -> None:
     bridge = MockBridge()
     ui = UIState(bridge)
-    data = PomodoroFullscreenData(visible=True, task_key="DEV-99", elapsed_sec=300)
-    ui.set_pomodoro_overlay(data)
+    data = PomodoroStateData(
+        state="active",
+        remaining_sec=1200,
+        total_sec=1500,
+        task_key="DEV-99",
+        task_summary="Fix login",
+        pomodoro_number_today=1,
+    )
+    ui.set_pomodoro_state(data)
     msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
-    assert isinstance(msg, PomodoroFullscreenMsg)
+    assert isinstance(msg, PomodoroStateMsg)
     assert msg.data.task_key == "DEV-99"
-    assert msg.data.elapsed_sec == 300
+    assert msg.data.remaining_sec == 1200
+
+
+async def test_set_fullscreen_dispatches() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    data = FullscreenData(
+        kind="break_short",
+        title="Krótka przerwa",
+        message="Wstań",
+        duration_sec=300,
+    )
+    ui.set_fullscreen(data)
+    msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
+    assert isinstance(msg, FullscreenMsg)
+    assert msg.data.kind == "break_short"
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +199,7 @@ async def test_coalesce_last_value_wins() -> None:
 
 
 # ---------------------------------------------------------------------------
-# resend_all: 6 messages (top_bar + 4 screens + pomodoro_fullscreen)
+# resend_all: 6 messages (top_bar + 4 screens + pomodoro_state)
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +231,7 @@ async def test_resend_all_message_types() -> None:
         "Screen2Msg",
         "Screen3Msg",
         "Screen4Msg",
-        "PomodoroFullscreenMsg",
+        "PomodoroStateMsg",
     }
 
 

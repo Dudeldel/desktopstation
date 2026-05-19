@@ -7,6 +7,10 @@ from deskstation.bridge.protocol import (
     AckData,
     AckMsg,
     Envelope,
+    FullscreenData,
+    FullscreenDismissData,
+    FullscreenDismissMsg,
+    FullscreenMsg,
     HeartbeatData,
     HeartbeatMsg,
     HelloData,
@@ -19,8 +23,8 @@ from deskstation.bridge.protocol import (
     NotificationClickedMsg,
     PomodoroActionData,
     PomodoroActionMsg,
-    PomodoroFullscreenData,
-    PomodoroFullscreenMsg,
+    PomodoroStateData,
+    PomodoroStateMsg,
     PrClickedData,
     PrClickedMsg,
     PullRequest,
@@ -257,27 +261,58 @@ def test_parse_screen_4() -> None:
     assert env.data.items[1].done is True
 
 
-def test_parse_pomodoro_fullscreen_visible() -> None:
+def test_parse_pomodoro_state_active() -> None:
     line = (
-        '{"v":1,"type":"pomodoro_fullscreen","data":{"visible":true,'
-        '"task_key":"DEV-42","elapsed_sec":300,"total_sec":1500}}'
+        '{"v":1,"type":"pomodoro_state","data":{"state":"active",'
+        '"remaining_sec":847,"total_sec":1500,"task_key":"DEV-1234",'
+        '"task_summary":"Refactor auth","pomodoro_number_today":4}}'
     )
     env = parse_envelope(line)
-    assert isinstance(env, PomodoroFullscreenMsg)
-    assert env.data.visible is True
-    assert env.data.task_key == "DEV-42"
-    assert env.data.elapsed_sec == 300
+    assert isinstance(env, PomodoroStateMsg)
+    assert env.data.state == "active"
+    assert env.data.remaining_sec == 847
     assert env.data.total_sec == 1500
+    assert env.data.task_key == "DEV-1234"
+    assert env.data.task_summary == "Refactor auth"
+    assert env.data.pomodoro_number_today == 4
 
 
-def test_parse_pomodoro_fullscreen_defaults() -> None:
-    line = '{"v":1,"type":"pomodoro_fullscreen","data":{"visible":false}}'
+def test_parse_pomodoro_state_idle_defaults() -> None:
+    line = '{"v":1,"type":"pomodoro_state","data":{"state":"idle"}}'
     env = parse_envelope(line)
-    assert isinstance(env, PomodoroFullscreenMsg)
-    assert env.data.visible is False
-    assert env.data.task_key == ""
-    assert env.data.elapsed_sec == 0
-    assert env.data.total_sec == 1500
+    assert isinstance(env, PomodoroStateMsg)
+    assert env.data.state == "idle"
+    assert env.data.remaining_sec == 0
+    assert env.data.task_key is None
+    assert env.data.task_summary is None
+    assert env.data.pomodoro_number_today == 0
+
+
+def test_parse_pomodoro_state_rejects_invalid_state() -> None:
+    line = '{"v":1,"type":"pomodoro_state","data":{"state":"running"}}'
+    with pytest.raises(ValidationError):
+        parse_envelope(line)
+
+
+def test_parse_fullscreen_break_short() -> None:
+    line = (
+        '{"v":1,"type":"fullscreen","data":{"kind":"break_short","title":"Krótka przerwa",'
+        '"message":"Wstań i napij się wody","submessage":"Spójrz w dal",'
+        '"duration_sec":300,"activities":["water","eyes"],"dismissible":true}}'
+    )
+    env = parse_envelope(line)
+    assert isinstance(env, FullscreenMsg)
+    assert env.data.kind == "break_short"
+    assert env.data.duration_sec == 300
+    assert env.data.activities == ["water", "eyes"]
+    assert env.data.dismissible is True
+
+
+def test_parse_fullscreen_dismiss() -> None:
+    line = '{"v":1,"type":"fullscreen_dismiss","data":{"kind":"break_short"}}'
+    env = parse_envelope(line)
+    assert isinstance(env, FullscreenDismissMsg)
+    assert env.data.kind == "break_short"
 
 
 def test_parse_task_clicked() -> None:
@@ -316,11 +351,17 @@ def test_parse_macro_trigger() -> None:
 
 
 def test_parse_pomodoro_action_all_variants() -> None:
-    for action in ("start", "pause", "resume", "stop"):
+    for action in ("pause", "resume", "stop_with_log", "cancel", "start_loose", "skip_break"):
         line = f'{{"v":1,"type":"pomodoro_action","data":{{"action":"{action}"}}}}'
         env = parse_envelope(line)
         assert isinstance(env, PomodoroActionMsg)
         assert env.data.action == action
+
+
+def test_parse_pomodoro_action_rejects_invalid() -> None:
+    line = '{"v":1,"type":"pomodoro_action","data":{"action":"stop"}}'
+    with pytest.raises(ValidationError):
+        parse_envelope(line)
 
 
 def test_top_bar_rejects_extra_fields() -> None:
@@ -389,9 +430,23 @@ def test_m2_serialize_roundtrip() -> None:
             )
         ),
         Screen4Msg(data=Screen4Data(items=[TodoItem(id="t1", text="Todo", done=False)])),
-        PomodoroFullscreenMsg(
-            data=PomodoroFullscreenData(
-                visible=True, task_key="DEV-1", elapsed_sec=60, total_sec=1500
+        PomodoroStateMsg(
+            data=PomodoroStateData(
+                state="active",
+                remaining_sec=847,
+                total_sec=1500,
+                task_key="DEV-1",
+                task_summary="Task",
+                pomodoro_number_today=2,
+            )
+        ),
+        FullscreenMsg(
+            data=FullscreenData(
+                kind="break_short",
+                title="Krótka przerwa",
+                message="Wstań",
+                duration_sec=300,
+                activities=["water"],
             )
         ),
         TaskClickedMsg(data=TaskClickedData(key="DEV-1")),
@@ -399,7 +454,8 @@ def test_m2_serialize_roundtrip() -> None:
         NotificationClickedMsg(data=NotificationClickedData(id="x1")),
         TodoClickedMsg(data=TodoClickedData(id="t1")),
         MacroTriggerMsg(data=MacroTriggerData(name="open_terminal")),
-        PomodoroActionMsg(data=PomodoroActionData(action="start")),
+        PomodoroActionMsg(data=PomodoroActionData(action="stop_with_log")),
+        FullscreenDismissMsg(data=FullscreenDismissData(kind="break_short")),
     ]
     for env in envelopes:
         line = serialize_envelope(env)

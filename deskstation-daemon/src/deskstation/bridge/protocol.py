@@ -209,22 +209,52 @@ class Screen4Msg(BaseModel):
     data: Screen4Data
 
 
-# ---- pomodoro_fullscreen (host -> esp) ----
+# ---- pomodoro_state (host -> esp) ----
 
 
-class PomodoroFullscreenData(BaseModel):
+PomodoroStateName = Literal["idle", "active", "paused", "short_break", "long_break"]
+
+
+class PomodoroStateData(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    visible: bool
-    task_key: str = ""
-    elapsed_sec: int = 0
-    total_sec: int = 1500  # 25 min default
+    state: PomodoroStateName
+    remaining_sec: int = 0
+    total_sec: int = 0
+    task_key: str | None = None
+    task_summary: str | None = None
+    pomodoro_number_today: int = 0
 
 
-class PomodoroFullscreenMsg(BaseModel):
+class PomodoroStateMsg(BaseModel):
     model_config = ConfigDict(extra="forbid")
     v: Literal[1] = 1
-    type: Literal["pomodoro_fullscreen"] = "pomodoro_fullscreen"
-    data: PomodoroFullscreenData
+    type: Literal["pomodoro_state"] = "pomodoro_state"
+    data: PomodoroStateData
+
+
+# ---- fullscreen (host -> esp): break / reminder overlay ----
+
+
+FullscreenKind = Literal["break_short", "break_long", "water", "eyes", "standup"]
+FullscreenActivity = Literal["water", "eyes", "stretch", "walk"]
+
+
+class FullscreenData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: FullscreenKind
+    title: str
+    message: str = ""
+    submessage: str = ""
+    duration_sec: int = 0
+    activities: list[FullscreenActivity] = Field(default_factory=list)
+    dismissible: bool = True
+
+
+class FullscreenMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["fullscreen"] = "fullscreen"
+    data: FullscreenData
 
 
 # ---- esp -> host events ----
@@ -290,9 +320,12 @@ class MacroTriggerMsg(BaseModel):
     data: MacroTriggerData
 
 
+PomodoroAction = Literal["pause", "resume", "stop_with_log", "cancel", "start_loose", "skip_break"]
+
+
 class PomodoroActionData(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["start", "pause", "resume", "stop"]
+    action: PomodoroAction
 
 
 class PomodoroActionMsg(BaseModel):
@@ -300,6 +333,18 @@ class PomodoroActionMsg(BaseModel):
     v: Literal[1] = 1
     type: Literal["pomodoro_action"] = "pomodoro_action"
     data: PomodoroActionData
+
+
+class FullscreenDismissData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: FullscreenKind
+
+
+class FullscreenDismissMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["fullscreen_dismiss"] = "fullscreen_dismiss"
+    data: FullscreenDismissData
 
 
 Envelope = Annotated[
@@ -313,13 +358,15 @@ Envelope = Annotated[
     | Screen2Msg
     | Screen3Msg
     | Screen4Msg
-    | PomodoroFullscreenMsg
+    | PomodoroStateMsg
+    | FullscreenMsg
     | TaskClickedMsg
     | PrClickedMsg
     | NotificationClickedMsg
     | TodoClickedMsg
     | MacroTriggerMsg
-    | PomodoroActionMsg,
+    | PomodoroActionMsg
+    | FullscreenDismissMsg,
     Field(discriminator="type"),
 ]
 
