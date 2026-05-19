@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
 from deskstation.bridge.mock_bridge import MockBridge
@@ -93,7 +94,7 @@ def _route_search(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_MY_TASKS_PAYLOAD)
     if "openSprints()" in jql:
         return httpx.Response(200, json=_SPRINT_PAYLOAD)
-    return httpx.Response(400, json={"errorMessages": [f"unexpected JQL: {jql}"]})
+    pytest.fail(f"unexpected JQL in route_search: {jql!r}")
 
 
 async def test_jira_poller_to_bridge_end_to_end(tmp_path: Path) -> None:
@@ -113,15 +114,14 @@ async def test_jira_poller_to_bridge_end_to_end(tmp_path: Path) -> None:
             router.post("/rest/api/3/search/jql").mock(side_effect=_route_search)
             await poller.tick()
 
-            # Drain bridge messages until we see a Screen1Msg (UIState's send
-            # is scheduled via create_task — give it a moment to fire).
-            screen1: Screen1Msg | None = None
-            for _ in range(5):
-                msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
-                if isinstance(msg, Screen1Msg):
-                    screen1 = msg
-                    break
-            assert screen1 is not None, "no Screen1Msg observed on bridge"
+            # UIState coalesces sends per screen, so exactly one Screen1Msg
+            # lands per tick(). A wrong-type message produces a clear failure
+            # naming the offending message rather than a vague timeout.
+            msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
+            assert isinstance(msg, Screen1Msg), (
+                f"expected Screen1Msg, got {type(msg).__name__}: {msg!r}"
+            )
+            screen1 = msg
 
             # today_tasks come from the "my tasks" mock response.
             assert [t.key for t in screen1.data.today_tasks] == ["DEV-100", "DEV-101"]

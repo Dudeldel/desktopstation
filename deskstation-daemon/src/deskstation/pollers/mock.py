@@ -10,6 +10,7 @@ import asyncio
 import random
 import time
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -302,11 +303,11 @@ def start_all_mocks(
     Returns the list of Task handles for cancellation on shutdown.
     """
     skip = skip or set()
-    candidates: list[tuple[str, MockPoller]] = [
-        ("top_bar", TopBarPoller(ui_state, interval_sec)),
-        ("screen_1", Screen1Poller(ui_state, interval_sec)),
-        ("screen_2", Screen2Poller(ui_state, interval_sec)),
-        ("screen_3", Screen3Poller(ui_state, interval_sec)),
-        ("screen_4", Screen4Poller(ui_state, interval_sec)),
+    factories: list[tuple[str, Callable[[], MockPoller]]] = [
+        ("top_bar", lambda: TopBarPoller(ui_state, interval_sec)),
+        ("screen_1", lambda: Screen1Poller(ui_state, interval_sec)),
+        ("screen_2", lambda: Screen2Poller(ui_state, interval_sec)),
+        ("screen_3", lambda: Screen3Poller(ui_state, interval_sec)),
+        ("screen_4", lambda: Screen4Poller(ui_state, interval_sec)),
     ]
-    return [asyncio.create_task(p.run_forever()) for key, p in candidates if key not in skip]
+    return [asyncio.create_task(make().run_forever()) for key, make in factories if key not in skip]
