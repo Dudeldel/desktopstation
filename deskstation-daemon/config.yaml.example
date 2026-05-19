@@ -7,6 +7,8 @@ serial:
 
 bridge:
   mode: serial  # alternatives: mock
+  # With `mode: mock` (offline dev), keep all six integration `enabled` flags
+  # below set to `false` so the daemon doesn't make real API calls.
 
 heartbeat:
   interval_sec: 5.0
@@ -21,3 +23,45 @@ logging:
 # mock:
 #   enabled: true
 #   interval_sec: 5.0
+
+# ---- M4: Jira + Bitbucket integrations ----
+# Requires ~/.config/deskstation/secrets.yaml with `jira:` and `bitbucket:` sections.
+# See README "Configuring real integrations (M4)" for the secrets schema.
+
+jira:
+  enabled: false                 # flip to true once secrets.yaml has a jira: section
+  project_key: ""                # your "lead project" key, drives the sprint query (e.g. "DEV")
+  poll_interval_sec: 60.0
+
+bitbucket:
+  enabled: false                 # flip to true once secrets.yaml has a bitbucket: section
+  workspace: ""                  # must match secrets.bitbucket.workspace
+  repos: []                      # list of repo slugs to track for CI/CD pipeline state
+  poll_interval_sec: 60.0
+
+# ---- M5: Google + dbus comms + Calendar ----
+# Requires ~/.config/deskstation/google_token.json (run `uv run deskstation auth-google`).
+# See README "Configuring Google integrations (M5)" for the setup walkthrough.
+
+gmail:
+  enabled: false                 # flip to true once auth-google has run
+  poll_interval_sec: 60.0
+
+gchat:
+  enabled: false                 # flip to true once auth-google has run
+  my_email: ""                   # your email — used for @-mention detection in spaces
+  poll_interval_sec: 60.0
+
+calendar:
+  enabled: false                 # flip to true once auth-google has run
+  near_interval_sec: 60.0        # polling cadence when next meeting < near_window_sec away
+  far_interval_sec: 300.0        # baseline polling cadence
+  near_window_sec: 1800          # 30 minutes — when to switch to near interval
+
+dbus:
+  enabled: false                 # flip to true on Linux desktops to capture WhatsApp/Slack notifications
+  app_name_patterns:
+    - "WhatsApp*"
+    - "Messenger*"
+    - "Slack*"
+  buffer_size: 32

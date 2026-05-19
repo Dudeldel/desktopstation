@@ -16,7 +16,6 @@ Error policy mirrors `JiraPoller` / `BitbucketPoller`:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import structlog
@@ -27,6 +26,7 @@ from deskstation.clients.gmail import (
     GmailClient,
     GmailTransientError,
 )
+from deskstation.pollers._time import format_time_ago
 from deskstation.pollers.mock import MockPoller
 
 if TYPE_CHECKING:
@@ -34,21 +34,6 @@ if TYPE_CHECKING:
     from deskstation.ui_state import UIState
 
 log = structlog.get_logger(__name__)
-
-
-def _format_time_ago(received_at: datetime) -> str:
-    """Produce Polish 'X temu' strings: minutes / hours / days."""
-    now = datetime.now(UTC)
-    if received_at.tzinfo is None:
-        received_at = received_at.replace(tzinfo=UTC)
-    delta = now - received_at
-    total_seconds = max(int(delta.total_seconds()), 0)
-    if total_seconds < 3600:
-        minutes = max(total_seconds // 60, 0)
-        return f"{minutes}m temu"
-    if total_seconds < 86400:
-        return f"{total_seconds // 3600}h temu"
-    return f"{total_seconds // 86400}d temu"
 
 
 class GmailPoller(MockPoller):
@@ -88,7 +73,7 @@ class GmailPoller(MockPoller):
                 source="gmail",
                 sender=m.sender,
                 preview=m.subject,
-                time_ago=_format_time_ago(m.received_at),
+                time_ago=format_time_ago(m.received_at),
                 id=m.id,
             )
             for m in messages

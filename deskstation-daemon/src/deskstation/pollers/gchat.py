@@ -36,12 +36,8 @@ from deskstation.clients.gchat import (
     GoogleChatClient,
     GoogleChatTransientError,
 )
-from deskstation.pollers.gmail import _format_time_ago
+from deskstation.pollers._time import format_time_ago
 from deskstation.pollers.mock import MockPoller
-
-# TODO(M5.x cleanup): ``_format_time_ago`` is now used by both the Gmail
-# and Chat pollers. Move to a shared ``deskstation.pollers._time`` helper
-# module once dbus / calendar pollers land in M5.4 / M5.6.
 
 if TYPE_CHECKING:
     from deskstation.engines.screen2_merger import Screen2Merger
@@ -124,7 +120,7 @@ class GoogleChatPoller(MockPoller):
                         source="chat",
                         sender=msg.sender_display_name,
                         preview=msg.text[:100],
-                        time_ago=_format_time_ago(msg.create_time),
+                        time_ago=format_time_ago(msg.create_time),
                         id=msg.name,
                     )
                 )

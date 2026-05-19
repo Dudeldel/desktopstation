@@ -15,7 +15,8 @@ import pytest
 from deskstation.bridge.mock_bridge import MockBridge
 from deskstation.bridge.protocol import Screen2Msg
 from deskstation.clients.gmail import GmailAuthError, GmailMessage, GmailTransientError
-from deskstation.pollers.gmail import GmailPoller, _format_time_ago
+from deskstation.pollers._time import format_time_ago
+from deskstation.pollers.gmail import GmailPoller
 from deskstation.ui_state import UIState
 
 
@@ -111,20 +112,20 @@ async def test_poller_exposes_latest_notifications() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _format_time_ago
+# format_time_ago
 # ---------------------------------------------------------------------------
 
 
 def test_format_time_ago_recent() -> None:
     received = datetime.now(UTC) - timedelta(minutes=5, seconds=2)
-    assert _format_time_ago(received) == "5m temu"
+    assert format_time_ago(received) == "5m temu"
 
 
 def test_format_time_ago_hours() -> None:
     received = datetime.now(UTC) - timedelta(hours=2, minutes=5)
-    assert _format_time_ago(received) == "2h temu"
+    assert format_time_ago(received) == "2h temu"
 
 
 def test_format_time_ago_days() -> None:
     received = datetime.now(UTC) - timedelta(hours=25)
-    assert _format_time_ago(received) == "1d temu"
+    assert format_time_ago(received) == "1d temu"

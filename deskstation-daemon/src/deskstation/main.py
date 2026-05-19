@@ -388,6 +388,7 @@ async def _run() -> None:
     if dbus_listener is not None:
         await dbus_listener.stop()
     pomodoro_store.close()
+    cache.close()
     await bridge.close()
     log.info("shutdown_complete")
 
