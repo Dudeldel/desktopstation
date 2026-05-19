@@ -289,6 +289,12 @@ class GoogleChatClient:
             page_token = resp.get("nextPageToken") or None
             if not page_token:
                 break
+        if page_token:
+            log.warning(
+                "gchat_spaces_page_cap_reached",
+                cap=_MAX_PAGES,
+                message="more spaces exist beyond the page cap; some DMs may not appear",
+            )
         return out
 
     def _fetch_messages(self, space_name: str, since: datetime) -> list[ChatMessage]:
