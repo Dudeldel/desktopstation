@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
+from structlog.testing import capture_logs
 
 from deskstation.bridge.heartbeat import ConnectionMonitor
 from deskstation.bridge.mock_bridge import MockBridge
@@ -211,10 +212,15 @@ async def test_unknown_envelope_type_logs_and_continues() -> None:
     merger = Screen2Merger(ui)
     merger.register_url("real", "https://example.com/after-unknown")
 
-    with patch("deskstation.main.subprocess.run") as mock_run:
+    with capture_logs() as logs, patch("deskstation.main.subprocess.run") as mock_run:
         await _run_dispatch_once(bridge, merger=merger)
 
-    # The loop survived the unknown envelope and dispatched the next one.
+    # (a) The unknown type was logged with the right `type` kwarg.
+    assert any(
+        e["event"] == "unknown_envelope_type" and e.get("type") == "_UnknownEnvelope" for e in logs
+    ), f"unknown_envelope_type warning not emitted; logs={logs}"
+
+    # (b) The loop survived the unknown envelope and dispatched the next one.
     mock_run.assert_called_once_with(
         ["xdg-open", "https://example.com/after-unknown"],
         check=False,
