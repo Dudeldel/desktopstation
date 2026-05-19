@@ -1,6 +1,10 @@
 #include "ui.h"
 #include "carousel.h"
 #include "dots.h"
+#include "screen_1.h"
+#include "screen_2.h"
+#include "screen_3.h"
+#include "screen_4.h"
 #include "theme.h"
 #include "toast.h"
 #include "top_bar.h"
@@ -110,5 +114,12 @@ void ui_build_main_screen(void)
     top_bar_init(scr);
     dots_init(scr);
     carousel_init(scr);
+
+    // Phase C: per-screen content modules attach to their carousel tiles.
+    screen_1_init(carousel_tile(0));
+    screen_2_init(carousel_tile(1));
+    screen_3_init(carousel_tile(2));
+    screen_4_init(carousel_tile(3));
+
     toast_init(scr);  // existing M1 overlay, lazy-built on show
 }

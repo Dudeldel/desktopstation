@@ -5,6 +5,11 @@
 #include "toast.h"
 #include "top_bar.h"
 #include "carousel.h"
+#include "pomodoro_overlay.h"
+#include "screen_1.h"
+#include "screen_2.h"
+#include "screen_3.h"
+#include "screen_4.h"
 #include "usb_cdc.h"
 
 #include "esp_log.h"
@@ -74,15 +79,19 @@ static void ui_dispatch_task(void *arg)
                 top_bar_update(&msg.data.top_bar);
                 break;
             case MSG_SCREEN_1:
+                screen_1_update(&msg.data.screen_1);
+                break;
             case MSG_SCREEN_2:
+                screen_2_update(&msg.data.screen_2);
+                break;
             case MSG_SCREEN_3:
+                screen_3_update(&msg.data.screen_3);
+                break;
             case MSG_SCREEN_4:
-                // Phase C will route to per-screen renderers. For now we just log.
-                ESP_LOGD(TAG, "screen payload received type=%d", msg.type);
+                screen_4_update(&msg.data.screen_4);
                 break;
             case MSG_POMODORO_FULLSCREEN:
-                // Phase C will implement the overlay; meanwhile we pause/resume
-                // autoscroll based on visible flag.
+                pomodoro_overlay_update(&msg.data.pomo);
                 if (msg.data.pomo.visible) carousel_autoscroll_pause();
                 else carousel_autoscroll_resume();
                 break;
