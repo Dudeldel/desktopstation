@@ -10,15 +10,20 @@ from deskstation.bridge.interface import BridgeProtocol
 from deskstation.bridge.mock_bridge import MockBridge
 from deskstation.bridge.protocol import (
     AckMsg,
+    FullscreenDismissMsg,
     HeartbeatMsg,
     HelloMsg,
+    PomodoroActionMsg,
     ScreenChangedMsg,
+    TaskClickedMsg,
     ToastMsg,
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
 from deskstation.config import Config, load_config
+from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.mock import start_all_mocks
+from deskstation.store.pomodoro_store import PomodoroStore
 from deskstation.ui_state import UIState
 
 log = structlog.get_logger(__name__)
@@ -32,7 +37,12 @@ def _build_bridge(cfg: Config) -> BridgeProtocol:
     return SerialBridge(factory, reconnect_interval_sec=cfg.serial.reconnect_interval_sec)
 
 
-async def _dispatch(bridge: BridgeProtocol, monitor: ConnectionMonitor, ui_state: UIState) -> None:
+async def _dispatch(
+    bridge: BridgeProtocol,
+    monitor: ConnectionMonitor,
+    ui_state: UIState,
+    pomodoro: PomodoroEngine,
+) -> None:
     was_connected = monitor.is_connected
     async for env in bridge.stream():
         monitor.mark_rx()
@@ -50,6 +60,28 @@ async def _dispatch(bridge: BridgeProtocol, monitor: ConnectionMonitor, ui_state
             log.debug("ack_received", of_type=env.data.of_type)
         elif isinstance(env, ToastMsg):
             log.warning("toast_from_esp_ignored", text=env.data.text)
+        elif isinstance(env, TaskClickedMsg):
+            # M3: start a pomodoro for the clicked task. task_summary lookup
+            # arrives in M4 with the real Jira poller; for now we pass None.
+            pomodoro.start_task(env.data.key)
+        elif isinstance(env, PomodoroActionMsg):
+            action = env.data.action
+            if action == "pause":
+                pomodoro.pause()
+            elif action == "resume":
+                pomodoro.resume()
+            elif action == "stop_with_log":
+                pomodoro.stop_with_log()
+            elif action == "cancel":
+                pomodoro.cancel()
+            elif action == "start_loose":
+                pomodoro.start_loose()
+            elif action == "skip_break":
+                pomodoro.skip_break()
+        elif isinstance(env, FullscreenDismissMsg):
+            # Dismissing a break overlay short-circuits the break (same as skip_break).
+            log.info("fullscreen_dismissed", kind=env.data.kind)
+            pomodoro.skip_break()
         else:
             log.warning("unknown_envelope_type")
 
@@ -67,6 +99,9 @@ async def _run() -> None:
     monitor = ConnectionMonitor(timeout_sec=cfg.heartbeat.timeout_sec)
     ui_state = UIState(bridge)
 
+    pomodoro_store = PomodoroStore()
+    pomodoro = PomodoroEngine(ui_state, pomodoro_store)
+
     mock_tasks: list[asyncio.Task[None]] = []
     if cfg.mock.enabled:
         log.info("starting_mock_pollers", interval_sec=cfg.mock.interval_sec)
@@ -79,8 +114,9 @@ async def _run() -> None:
 
     tasks = [
         asyncio.create_task(heartbeat_sender(bridge, interval_sec=cfg.heartbeat.interval_sec)),
-        asyncio.create_task(_dispatch(bridge, monitor, ui_state)),
+        asyncio.create_task(_dispatch(bridge, monitor, ui_state, pomodoro)),
         asyncio.create_task(monitor.watchdog()),
+        pomodoro.start(),
         *mock_tasks,
     ]
 
@@ -90,6 +126,7 @@ async def _run() -> None:
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+    pomodoro_store.close()
     await bridge.close()
     log.info("shutdown_complete")
 
