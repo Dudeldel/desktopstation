@@ -11,6 +11,7 @@ static lv_obj_t   *s_tiles[CAROUSEL_TILES];
 static int         s_active         = 0;
 static bool        s_built          = false;
 static lv_timer_t *s_autoscroll     = NULL;
+static lv_coord_t  s_press_x        = 0;   // for edge-wrap swipe detection
 
 /* Set to "autoscroll" by autoscroll_cb before calling carousel_set_active;
  * reset to "swipe" after the value-changed handler consumes it. */
@@ -21,8 +22,10 @@ static const char *s_pending_via    = "swipe";
 /* ------------------------------------------------------------------ */
 static void _on_value_changed(lv_event_t *e);
 static void _on_pressed(lv_event_t *e);
-static void _on_gesture(lv_event_t *e);
+static void _on_released(lv_event_t *e);
 static void autoscroll_cb(lv_timer_t *t);
+
+#define EDGE_SWIPE_THRESHOLD_PX 60   // min horizontal travel to count as a swipe
 
 /* ------------------------------------------------------------------ */
 /* autoscroll_cb                                                        */
@@ -52,28 +55,37 @@ static void _on_pressed(lv_event_t *e)
 {
     (void)e;
     if (s_autoscroll) lv_timer_pause(s_autoscroll);
+    // Record start of swipe for edge-wrap detection in _on_released.
+    lv_indev_t *indev = lv_indev_get_act();
+    if (indev) {
+        lv_point_t p;
+        lv_indev_get_point(indev, &p);
+        s_press_x = p.x;
+    }
 }
 
 /* ------------------------------------------------------------------ */
-/* Gesture handler — wrap around manual swipes at the carousel edges. */
-/* LVGL's tileview hard-stops at the first/last tile; we want a swipe */
-/* past the edge to snap to the opposite end, matching autoscroll.    */
+/* Release handler — wrap manual swipes at the carousel edges.        */
+/* The tileview's scroll-snap consumes drags before LVGL classifies   */
+/* them as gestures, so LV_EVENT_GESTURE doesn't reliably fire here.  */
+/* Instead, track the press/release X positions ourselves and apply   */
+/* the wrap when the user swiped past either edge of the carousel.    */
 /* ------------------------------------------------------------------ */
-static void _on_gesture(lv_event_t *e)
+static void _on_released(lv_event_t *e)
 {
     (void)e;
     lv_indev_t *indev = lv_indev_get_act();
     if (!indev) return;
-    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+    lv_coord_t dx = p.x - s_press_x;
 
-    /* LV_DIR_LEFT = finger swept left = user wants the next-right tile.
-     * LV_DIR_RIGHT = finger swept right = user wants the previous-left tile. */
-    if (dir == LV_DIR_LEFT && s_active == CAROUSEL_TILES - 1) {
-        lv_indev_wait_release(indev);
+    // Swipe left (finger moved left -> dx < 0) on the last tile -> wrap to first.
+    if (dx < -EDGE_SWIPE_THRESHOLD_PX && s_active == CAROUSEL_TILES - 1) {
         s_pending_via = "swipe";
         carousel_set_active(0, false);
-    } else if (dir == LV_DIR_RIGHT && s_active == 0) {
-        lv_indev_wait_release(indev);
+    // Swipe right (dx > 0) on the first tile -> wrap to last.
+    } else if (dx > EDGE_SWIPE_THRESHOLD_PX && s_active == 0) {
         s_pending_via = "swipe";
         carousel_set_active(CAROUSEL_TILES - 1, false);
     }
@@ -135,11 +147,11 @@ void carousel_init(lv_obj_t *parent)
     /* Track active index via scroll events */
     lv_obj_add_event_cb(s_tv, _on_value_changed, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* Touch pauses autoscroll until a swipe completes */
-    lv_obj_add_event_cb(s_tv, _on_pressed, LV_EVENT_PRESSED, NULL);
-
-    /* Wrap manual swipes at the edges (LVGL tileview doesn't wrap by default) */
-    lv_obj_add_event_cb(s_tv, _on_gesture, LV_EVENT_GESTURE, NULL);
+    /* Touch pauses autoscroll, release evaluates edge-wrap. Attach to the
+     * active screen because the deepest pressed object varies per tile and
+     * LVGL events don't bubble by default. */
+    lv_obj_add_event_cb(lv_scr_act(), _on_pressed,  LV_EVENT_PRESSED,  NULL);
+    lv_obj_add_event_cb(lv_scr_act(), _on_released, LV_EVENT_RELEASED, NULL);
 
     /* --- tiles: screen_N modules attach their content here in ui_build_main_screen --- */
     for (int i = 0; i < CAROUSEL_TILES; i++) {
