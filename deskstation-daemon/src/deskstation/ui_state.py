@@ -70,6 +70,11 @@ class UIState:
         self._top_bar = data
         self._schedule_send("top_bar")
 
+    def set_pomodoros_today(self, n: int) -> None:
+        """Patch just the pomodoro counter on the existing top_bar snapshot."""
+        self._top_bar = self._top_bar.model_copy(update={"pomodoro_counter": n})
+        self._schedule_send("top_bar")
+
     def set_screen_1(
         self,
         today_tasks: list[JiraTask] | None = None,
