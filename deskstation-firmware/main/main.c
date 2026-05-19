@@ -90,10 +90,20 @@ static void ui_dispatch_task(void *arg)
             case MSG_SCREEN_4:
                 screen_4_update(&msg.data.screen_4);
                 break;
-            case MSG_POMODORO_FULLSCREEN:
-                pomodoro_overlay_update(&msg.data.pomo);
-                if (msg.data.pomo.visible) carousel_autoscroll_pause();
-                else carousel_autoscroll_resume();
+            case MSG_POMODORO_STATE:
+                pomodoro_overlay_update(&msg.data.pomo_state);
+                if (msg.data.pomo_state.state == POMO_ACTIVE
+                        || msg.data.pomo_state.state == POMO_PAUSED) {
+                    carousel_autoscroll_pause();
+                } else {
+                    carousel_autoscroll_resume();
+                }
+                break;
+            case MSG_FULLSCREEN:
+                // M3.6 will wire fullscreen_overlay_update here; for now log.
+                ESP_LOGD(TAG, "fullscreen kind=%d title=%s",
+                    (int)msg.data.fullscreen.kind, msg.data.fullscreen.title);
+                carousel_autoscroll_pause();
                 break;
             case MSG_HELLO:
             case MSG_SCREEN_CHANGED:

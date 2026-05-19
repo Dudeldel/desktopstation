@@ -22,8 +22,30 @@ static msg_type_t parse_type(const char *t)
     if (strcmp(t, "screen_2") == 0) return MSG_SCREEN_2;
     if (strcmp(t, "screen_3") == 0) return MSG_SCREEN_3;
     if (strcmp(t, "screen_4") == 0) return MSG_SCREEN_4;
-    if (strcmp(t, "pomodoro_fullscreen") == 0) return MSG_POMODORO_FULLSCREEN;
+    if (strcmp(t, "pomodoro_state") == 0) return MSG_POMODORO_STATE;
+    if (strcmp(t, "fullscreen") == 0) return MSG_FULLSCREEN;
     return MSG_UNKNOWN;
+}
+
+static pomo_state_t parse_pomo_state(const char *s)
+{
+    if (!s) return POMO_IDLE;
+    if (strcmp(s, "active") == 0) return POMO_ACTIVE;
+    if (strcmp(s, "paused") == 0) return POMO_PAUSED;
+    if (strcmp(s, "short_break") == 0) return POMO_SHORT_BREAK;
+    if (strcmp(s, "long_break") == 0) return POMO_LONG_BREAK;
+    return POMO_IDLE;
+}
+
+static fullscreen_kind_t parse_fs_kind(const char *s)
+{
+    if (!s) return FS_KIND_BREAK_SHORT;
+    if (strcmp(s, "break_short") == 0) return FS_KIND_BREAK_SHORT;
+    if (strcmp(s, "break_long") == 0)  return FS_KIND_BREAK_LONG;
+    if (strcmp(s, "water") == 0)       return FS_KIND_WATER;
+    if (strcmp(s, "eyes") == 0)        return FS_KIND_EYES;
+    if (strcmp(s, "standup") == 0)     return FS_KIND_STANDUP;
+    return FS_KIND_BREAK_SHORT;
 }
 
 bool protocol_parse(const char *line, parsed_msg_t *out)
@@ -276,24 +298,77 @@ bool protocol_parse(const char *line, parsed_msg_t *out)
                 out->data.screen_4.items[i].done = cJSON_IsTrue(done_j);
             }
         }
-    } else if (out->type == MSG_POMODORO_FULLSCREEN) {
-        cJSON *visible_j  = cJSON_GetObjectItem(data, "visible");
-        cJSON *key_j      = cJSON_GetObjectItem(data, "task_key");
-        cJSON *elapsed_j  = cJSON_GetObjectItem(data, "elapsed_sec");
-        cJSON *total_j    = cJSON_GetObjectItem(data, "total_sec");
-        if (!cJSON_IsBool(visible_j)) {
-            ESP_LOGW(TAG, "pomodoro_fullscreen missing visible");
+    } else if (out->type == MSG_POMODORO_STATE) {
+        cJSON *state_j   = cJSON_GetObjectItem(data, "state");
+        cJSON *rem_j     = cJSON_GetObjectItem(data, "remaining_sec");
+        cJSON *tot_j     = cJSON_GetObjectItem(data, "total_sec");
+        cJSON *key_j     = cJSON_GetObjectItem(data, "task_key");
+        cJSON *sum_j     = cJSON_GetObjectItem(data, "task_summary");
+        cJSON *num_j     = cJSON_GetObjectItem(data, "pomodoro_number_today");
+        if (!cJSON_IsString(state_j)) {
+            ESP_LOGW(TAG, "pomodoro_state missing state");
             goto done;
         }
-        out->data.pomo.visible = cJSON_IsTrue(visible_j);
+        out->data.pomo_state.state = parse_pomo_state(state_j->valuestring);
+        out->data.pomo_state.remaining_sec = cJSON_IsNumber(rem_j) ? rem_j->valueint : 0;
+        out->data.pomo_state.total_sec     = cJSON_IsNumber(tot_j) ? tot_j->valueint : 0;
+        out->data.pomo_state.pomodoro_number_today = cJSON_IsNumber(num_j) ? num_j->valueint : 0;
         if (cJSON_IsString(key_j)) {
-            strncpy(out->data.pomo.task_key, key_j->valuestring, JIRA_KEY_MAX - 1);
-            out->data.pomo.task_key[JIRA_KEY_MAX - 1] = '\0';
+            out->data.pomo_state.has_task = true;
+            strncpy(out->data.pomo_state.task_key, key_j->valuestring, JIRA_KEY_MAX - 1);
+            out->data.pomo_state.task_key[JIRA_KEY_MAX - 1] = '\0';
         } else {
-            out->data.pomo.task_key[0] = '\0';
+            out->data.pomo_state.has_task = false;
+            out->data.pomo_state.task_key[0] = '\0';
         }
-        out->data.pomo.elapsed_sec = cJSON_IsNumber(elapsed_j) ? elapsed_j->valueint : 0;
-        out->data.pomo.total_sec   = cJSON_IsNumber(total_j)   ? total_j->valueint   : 0;
+        if (cJSON_IsString(sum_j)) {
+            strncpy(out->data.pomo_state.task_summary, sum_j->valuestring, POMO_SUMMARY_MAX - 1);
+            out->data.pomo_state.task_summary[POMO_SUMMARY_MAX - 1] = '\0';
+        } else {
+            out->data.pomo_state.task_summary[0] = '\0';
+        }
+    } else if (out->type == MSG_FULLSCREEN) {
+        cJSON *kind_j  = cJSON_GetObjectItem(data, "kind");
+        cJSON *title_j = cJSON_GetObjectItem(data, "title");
+        cJSON *msg_j   = cJSON_GetObjectItem(data, "message");
+        cJSON *sub_j   = cJSON_GetObjectItem(data, "submessage");
+        cJSON *dur_j   = cJSON_GetObjectItem(data, "duration_sec");
+        cJSON *act_j   = cJSON_GetObjectItem(data, "activities");
+        cJSON *dism_j  = cJSON_GetObjectItem(data, "dismissible");
+        if (!cJSON_IsString(kind_j) || !cJSON_IsString(title_j)) {
+            ESP_LOGW(TAG, "fullscreen missing kind/title");
+            goto done;
+        }
+        out->data.fullscreen.kind = parse_fs_kind(kind_j->valuestring);
+        strncpy(out->data.fullscreen.title, title_j->valuestring, FS_TITLE_MAX - 1);
+        out->data.fullscreen.title[FS_TITLE_MAX - 1] = '\0';
+        if (cJSON_IsString(msg_j)) {
+            strncpy(out->data.fullscreen.message, msg_j->valuestring, FS_MSG_MAX - 1);
+            out->data.fullscreen.message[FS_MSG_MAX - 1] = '\0';
+        } else {
+            out->data.fullscreen.message[0] = '\0';
+        }
+        if (cJSON_IsString(sub_j)) {
+            strncpy(out->data.fullscreen.submessage, sub_j->valuestring, FS_MSG_MAX - 1);
+            out->data.fullscreen.submessage[FS_MSG_MAX - 1] = '\0';
+        } else {
+            out->data.fullscreen.submessage[0] = '\0';
+        }
+        out->data.fullscreen.duration_sec = cJSON_IsNumber(dur_j) ? dur_j->valueint : 0;
+        out->data.fullscreen.dismissible  = cJSON_IsBool(dism_j) ? cJSON_IsTrue(dism_j) : true;
+
+        out->data.fullscreen.activity_count = 0;
+        if (cJSON_IsArray(act_j)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, act_j) {
+                if (out->data.fullscreen.activity_count >= FS_ACTIVITIES_MAX) break;
+                if (!cJSON_IsString(item)) continue;
+                size_t i = out->data.fullscreen.activity_count++;
+                strncpy(out->data.fullscreen.activities[i], item->valuestring,
+                        sizeof(out->data.fullscreen.activities[i]) - 1);
+                out->data.fullscreen.activities[i][sizeof(out->data.fullscreen.activities[i]) - 1] = '\0';
+            }
+        }
     }
 
     ok = true;
@@ -357,4 +432,10 @@ int protocol_serialize_screen_changed_int(char *buf, size_t cap, int screen, con
 {
     return snprintf(buf, cap,
         "{\"v\":1,\"type\":\"screen_changed\",\"data\":{\"screen\":%d,\"via\":\"%s\"}}", screen, via);
+}
+
+int protocol_serialize_fullscreen_dismiss(char *buf, size_t cap, const char *kind)
+{
+    return snprintf(buf, cap,
+        "{\"v\":1,\"type\":\"fullscreen_dismiss\",\"data\":{\"kind\":\"%s\"}}", kind);
 }

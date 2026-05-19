@@ -14,9 +14,26 @@ typedef enum {
     MSG_SCREEN_2,
     MSG_SCREEN_3,
     MSG_SCREEN_4,
-    MSG_POMODORO_FULLSCREEN,
+    MSG_POMODORO_STATE,
+    MSG_FULLSCREEN,
     MSG_UNKNOWN,
 } msg_type_t;
+
+typedef enum {
+    POMO_IDLE = 0,
+    POMO_ACTIVE,
+    POMO_PAUSED,
+    POMO_SHORT_BREAK,
+    POMO_LONG_BREAK,
+} pomo_state_t;
+
+typedef enum {
+    FS_KIND_BREAK_SHORT = 0,
+    FS_KIND_BREAK_LONG,
+    FS_KIND_WATER,
+    FS_KIND_EYES,
+    FS_KIND_STANDUP,
+} fullscreen_kind_t;
 
 #define TEXT_MAX 256
 
@@ -136,13 +153,32 @@ typedef struct {
     size_t      count;
 } screen4_payload_t;
 
-// ---- pomodoro_fullscreen (host -> esp) ----
+// ---- pomodoro_state (host -> esp) ----
+#define POMO_SUMMARY_MAX 96
 typedef struct {
-    bool visible;
-    char task_key[JIRA_KEY_MAX];
-    int  elapsed_sec;
+    pomo_state_t state;
+    int  remaining_sec;
     int  total_sec;
-} pomodoro_fullscreen_payload_t;
+    bool has_task;
+    char task_key[JIRA_KEY_MAX];
+    char task_summary[POMO_SUMMARY_MAX];
+    int  pomodoro_number_today;
+} pomodoro_state_payload_t;
+
+// ---- fullscreen (host -> esp): break / reminder overlay ----
+#define FS_TITLE_MAX 64
+#define FS_MSG_MAX   192
+#define FS_ACTIVITIES_MAX 6
+typedef struct {
+    fullscreen_kind_t kind;
+    char title[FS_TITLE_MAX];
+    char message[FS_MSG_MAX];
+    char submessage[FS_MSG_MAX];
+    int  duration_sec;
+    char activities[FS_ACTIVITIES_MAX][16];
+    size_t activity_count;
+    bool dismissible;
+} fullscreen_payload_t;
 
 typedef struct {
     msg_type_t type;
@@ -154,7 +190,8 @@ typedef struct {
         screen2_payload_t screen_2;
         screen3_payload_t screen_3;
         screen4_payload_t screen_4;
-        pomodoro_fullscreen_payload_t pomo;
+        pomodoro_state_payload_t pomo_state;
+        fullscreen_payload_t fullscreen;
     } data;
 } parsed_msg_t;
 
@@ -162,11 +199,14 @@ bool protocol_parse(const char *line, parsed_msg_t *out);
 int protocol_serialize_hello(char *buf, size_t cap, const char *firmware_version);
 int protocol_serialize_heartbeat(char *buf, size_t cap);
 
-// ESP -> host events (M2). Returns bytes written or -1 on overflow.
+// ESP -> host events (M2/M3). Returns bytes written or -1 on overflow.
 int protocol_serialize_task_clicked(char *buf, size_t cap, const char *key);
 int protocol_serialize_pr_clicked(char *buf, size_t cap, const char *id);
 int protocol_serialize_notification_clicked(char *buf, size_t cap, const char *id);
 int protocol_serialize_todo_clicked(char *buf, size_t cap, const char *id);
 int protocol_serialize_macro_trigger(char *buf, size_t cap, const char *name);
-int protocol_serialize_pomodoro_action(char *buf, size_t cap, const char *action);  // start|pause|resume|stop
+// action: pause | resume | stop_with_log | cancel | start_loose | skip_break
+int protocol_serialize_pomodoro_action(char *buf, size_t cap, const char *action);
 int protocol_serialize_screen_changed_int(char *buf, size_t cap, int screen, const char *via);  // via: swipe|dot_click|autoscroll
+// kind: break_short | break_long | water | eyes | standup
+int protocol_serialize_fullscreen_dismiss(char *buf, size_t cap, const char *kind);
