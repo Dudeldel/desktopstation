@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-M0 + M1 + M2 + M4 complete: daemon scaffold (Python asyncio, uv, pytest, structlog) i firmware scaffold (ESP-IDF v5.3 + LVGL 8.x). Transport USB CDC działa z heartbeat / reconnect / 5 typami wiadomości. Warstwa UI (M2) z makietami ekranów oraz integracje Jira + Bitbucket (M4) z httpx-owym klientem, SQLite cache i hookiem worklog z pomodoro.
+M0 + M1 + M2 + M4 + M5 complete: daemon scaffold (Python asyncio, uv, pytest, structlog) i firmware scaffold (ESP-IDF v5.3 + LVGL 8.x). Transport USB CDC działa z heartbeat / reconnect / 5 typami wiadomości. Warstwa UI (M2) z makietami ekranów, integracje Jira + Bitbucket (M4) z httpx-owym klientem, SQLite cache i hookiem worklog z pomodoro, oraz M5 — Gmail, Google Chat, Google Calendar pollery + freedesktop dbus listener, scalone na `screen_2` przez `Screen2Merger` (priorytet dbus > gmail > gchat) i napędzające `screen_1.next_meeting`.
 
 **Build / test / run commands:**
 
@@ -30,6 +30,7 @@ Deskstation is a two-part system; understanding the split is essential before to
 - Organized into `pollers/` (interval-driven async tasks), `listeners/` (event-driven: dbus, watchdog), `engines/` (in-memory state machines: pomodoro, standup, reminders), `executors/` (subprocess macros), `store/` (SQLite cache + history), and `ui_state.py` (aggregator that builds per-screen snapshot payloads).
 - `bridge/serial_bridge.py` is the critical component everything else sits on — async USB CDC reader/writer with heartbeat and reconnect.
 - M4 added live API integrations: `deskstation.clients.{jira,bitbucket}` (httpx REST wrappers), `deskstation.pollers.{jira,bitbucket}` (interval tasks with auth-failure short-circuit), `deskstation.store.api_cache` (last-known-good SQLite cache so the UI survives transient errors), and `deskstation.secrets` (loader for `~/.config/deskstation/secrets.yaml` with 0600 mode check).
+- M5 added the comms + calendar stack: `deskstation.auth_google` (one-shot OAuth setup CLI), `deskstation.clients.{gmail,gchat,gcal}` (googleapiclient-based wrappers, cache-through reads, auth/transient error split), `deskstation.pollers.{gmail,gchat,calendar}` (interval pollers — Calendar has an adaptive near/far cadence around upcoming meetings), `deskstation.listeners.dbus_notifications` (freedesktop notification monitor with an app-name allowlist), and `deskstation.engines.screen2_merger` (single owner of the `screen_2` dispatch — merges Gmail / Chat / dbus by source priority + per-source index, caps at 16 items, also indexes per-notification action URLs for `xdg-open`).
 
 **Firmware (ESP32-S3 + Waveshare 7" LCD, ESP-IDF v5.x + LVGL 8.x — `deskstation-firmware/`):**
 - Dumb terminal: renders LVGL UI, sends user events, receives full state snapshots. No business state, no API calls, no secrets.
