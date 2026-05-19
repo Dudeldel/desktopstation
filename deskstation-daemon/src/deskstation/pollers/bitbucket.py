@@ -111,6 +111,9 @@ class BitbucketPoller(MockPoller):
 
     @staticmethod
     def _to_pull_request(pr: Pr, pipeline_map: dict[str, str]) -> PullRequest:
+        # M4 placeholder: only review-kind vs open. Wiring "approved" /
+        # "changes_requested" from pr.approvals + per-participant state is a M6
+        # follow-up (PR detail polish).
         status: Literal["open", "needs_review"] = "needs_review" if pr.kind == "review" else "open"
         return PullRequest(
             id=pr.id,

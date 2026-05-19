@@ -62,6 +62,23 @@ def test_both_sections(tmp_path: Path) -> None:
     assert secrets.bitbucket is not None
     assert secrets.bitbucket.workspace == "my-workspace"
     assert secrets.bitbucket.api_token == "token-xyz"
+    # username is optional and must default to None when absent.
+    assert secrets.bitbucket.username is None
+
+
+def test_bitbucket_username_optional_and_loaded(tmp_path: Path) -> None:
+    p = tmp_path / "secrets.yaml"
+    p.write_text(
+        "bitbucket:\n"
+        "  workspace: my-ws\n"
+        "  email: jakub.dudek@wfirma.pl\n"
+        "  api_token: redacted\n"
+        "  username: jdudek\n"
+    )
+    os.chmod(p, 0o600)
+    secrets = load_secrets(p)
+    assert secrets.bitbucket is not None
+    assert secrets.bitbucket.username == "jdudek"
 
 
 def test_malformed_yaml_raises(tmp_path: Path) -> None:

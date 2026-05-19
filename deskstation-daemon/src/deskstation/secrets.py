@@ -31,6 +31,7 @@ class BitbucketSecrets(BaseModel):
     workspace: str
     email: str
     api_token: str
+    username: str | None = None
 
 
 class Secrets(BaseModel):

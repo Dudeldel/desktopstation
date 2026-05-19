@@ -23,39 +23,55 @@ from deskstation.ui_state import UIState
 
 
 class _FakeBitbucketClient:
-    """Minimal BitbucketClient stand-in with queued responses per method."""
+    """Minimal BitbucketClient stand-in with FIFO queues per method.
+
+    Each call pops the next response off the corresponding queue. An exhausted
+    queue raises AssertionError so accidental over-calls are caught loudly.
+    Mirrors the pattern in `test_jira_poller.py::_FakeJiraClient`.
+    """
 
     def __init__(
         self,
-        my_prs: list[Pr] | Exception,
-        review_prs: list[Pr] | Exception,
-        pipelines: dict[str, PipelineRun | None | Exception] | None = None,
+        my_prs: list[list[Pr] | Exception],
+        review_prs: list[list[Pr] | Exception],
+        pipelines: dict[str, list[PipelineRun | None | Exception]] | None = None,
     ) -> None:
-        self._my_prs = my_prs
-        self._review_prs = review_prs
-        self._pipelines = pipelines or {}
+        self._my_prs = list(my_prs)
+        self._review_prs = list(review_prs)
+        self._pipelines: dict[str, list[PipelineRun | None | Exception]] = {
+            k: list(v) for k, v in (pipelines or {}).items()
+        }
         self.my_prs_calls: list[str] = []
         self.review_prs_calls: list[tuple[str, list[str]]] = []
         self.pipeline_calls: list[str] = []
 
     async def list_my_open_prs(self, username: str) -> list[Pr]:
         self.my_prs_calls.append(username)
-        if isinstance(self._my_prs, Exception):
-            raise self._my_prs
-        return self._my_prs
+        if not self._my_prs:
+            raise AssertionError("unexpected call to list_my_open_prs")
+        nxt = self._my_prs.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
 
     async def list_review_prs(self, username: str, repos: list[str]) -> list[Pr]:
         self.review_prs_calls.append((username, list(repos)))
-        if isinstance(self._review_prs, Exception):
-            raise self._review_prs
-        return self._review_prs
+        if not self._review_prs:
+            raise AssertionError("unexpected call to list_review_prs")
+        nxt = self._review_prs.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
 
     async def latest_pipeline(self, repo: str, branch: str = "main") -> PipelineRun | None:
         self.pipeline_calls.append(repo)
-        val = self._pipelines.get(repo)
-        if isinstance(val, Exception):
-            raise val
-        return val
+        queue = self._pipelines.get(repo)
+        if not queue:
+            raise AssertionError("unexpected call to latest_pipeline")
+        nxt = queue.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
 
 
 def _pr(
@@ -90,9 +106,9 @@ def _pipeline(repo: str, state: str) -> PipelineRun:
 
 
 def _make_poller(
-    my_prs: list[Pr] | Exception,
-    review_prs: list[Pr] | Exception,
-    pipelines: dict[str, PipelineRun | None | Exception] | None = None,
+    my_prs: list[list[Pr] | Exception],
+    review_prs: list[list[Pr] | Exception],
+    pipelines: dict[str, list[PipelineRun | None | Exception]] | None = None,
     repos: list[str] | None = None,
     username: str = "alice",
 ) -> tuple[BitbucketPoller, UIState, MockBridge, _FakeBitbucketClient]:
@@ -112,10 +128,10 @@ def _make_poller(
 async def test_poller_pushes_screen_3() -> None:
     my = [_pr("1", "my pr", "app", "alice", "mine")]
     review = [_pr("2", "review me", "app", "bob", "review")]
-    pipelines: dict[str, PipelineRun | None | Exception] = {
-        "app": _pipeline("app", "SUCCESSFUL"),
+    pipelines: dict[str, list[PipelineRun | None | Exception]] = {
+        "app": [_pipeline("app", "SUCCESSFUL")],
     }
-    poller, _ui, bridge, _ = _make_poller(my, review, pipelines, repos=["app"])
+    poller, _ui, bridge, _ = _make_poller([my], [review], pipelines, repos=["app"])
 
     await poller.tick()
 
@@ -137,8 +153,9 @@ def test_poller_state_to_ci_mapping() -> None:
 
 
 async def test_poller_handles_transient_error_on_my_prs() -> None:
+    # my_prs raises -> review_prs is never reached, so no entry needed there.
     poller, ui, _, client = _make_poller(
-        BitbucketTransientError("503"),
+        [BitbucketTransientError("503")],
         [],
     )
     set_screen_3 = MagicMock()
@@ -152,8 +169,11 @@ async def test_poller_handles_transient_error_on_my_prs() -> None:
 
 
 async def test_poller_handles_auth_error_then_short_circuits() -> None:
+    # Only the first tick reaches the fake; second tick is guarded by
+    # auth_failed and must short-circuit before any client call. So we
+    # enqueue exactly one response for my_prs and nothing else.
     poller, _, _, client = _make_poller(
-        BitbucketAuthError("401"),
+        [BitbucketAuthError("401")],
         [],
     )
 
@@ -172,11 +192,11 @@ async def test_poller_handles_auth_error_then_short_circuits() -> None:
 async def test_poller_pipeline_error_skips_repo() -> None:
     my = [_pr("1", "my pr in app", "app", "alice", "mine")]
     review = [_pr("2", "review me in backend", "backend", "bob", "review")]
-    pipelines: dict[str, PipelineRun | None | Exception] = {
-        "app": BitbucketTransientError("pipeline 503"),
-        "backend": _pipeline("backend", "SUCCESSFUL"),
+    pipelines: dict[str, list[PipelineRun | None | Exception]] = {
+        "app": [BitbucketTransientError("pipeline 503")],
+        "backend": [_pipeline("backend", "SUCCESSFUL")],
     }
-    poller, _ui, bridge, _ = _make_poller(my, review, pipelines, repos=["app", "backend"])
+    poller, _ui, bridge, _ = _make_poller([my], [review], pipelines, repos=["app", "backend"])
 
     await poller.tick()
 
@@ -190,8 +210,8 @@ async def test_poller_pipeline_error_skips_repo() -> None:
 async def test_poller_handles_no_pipeline_data() -> None:
     my = [_pr("1", "my pr", "app", "alice", "mine")]
     review = [_pr("2", "review me", "app", "bob", "review")]
-    pipelines: dict[str, PipelineRun | None | Exception] = {"app": None}
-    poller, _ui, bridge, _ = _make_poller(my, review, pipelines, repos=["app"])
+    pipelines: dict[str, list[PipelineRun | None | Exception]] = {"app": [None]}
+    poller, _ui, bridge, _ = _make_poller([my], [review], pipelines, repos=["app"])
 
     await poller.tick()
 
@@ -203,7 +223,7 @@ async def test_poller_handles_no_pipeline_data() -> None:
 async def test_poller_status_kind_mapping() -> None:
     my = [_pr("1", "mine", "app", "alice", "mine")]
     review = [_pr("2", "reviewer", "app", "bob", "review")]
-    poller, _ui, bridge, _ = _make_poller(my, review, {"app": None}, repos=["app"])
+    poller, _ui, bridge, _ = _make_poller([my], [review], {"app": [None]}, repos=["app"])
 
     await poller.tick()
 

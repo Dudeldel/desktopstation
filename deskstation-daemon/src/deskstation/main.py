@@ -139,9 +139,10 @@ async def _run() -> None:
             secrets.bitbucket.api_token,
             cache,
         )
-        # username = email's local-part (Bitbucket nickname conventionally matches).
-        # Placeholder for M4; a proper config field can land in M5+.
-        bb_username = secrets.bitbucket.email.split("@")[0]
+        # Prefer explicit username; fall back to email local-part for backwards compat.
+        # If your Bitbucket nickname differs from your email's local-part, set
+        # bitbucket.username in secrets.yaml.
+        bb_username = secrets.bitbucket.username or secrets.bitbucket.email.split("@")[0]
         bitbucket_poller = BitbucketPoller(
             ui_state,
             bitbucket_client,
