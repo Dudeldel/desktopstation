@@ -98,12 +98,16 @@ esp_err_t ui_init(esp_lcd_panel_handle_t panel, esp_lcd_touch_handle_t touch)
     esp_timer_create(&tick_args, &tick_handle);
     esp_timer_start_periodic(tick_handle, LVGL_TICK_PERIOD_MS * 1000);
 
+    ESP_LOGI(TAG, "LVGL initialized");
+    return ESP_OK;
+}
+
+esp_err_t ui_start_lvgl_task(void)
+{
     if (xTaskCreatePinnedToCore(lvgl_task, "lvgl", LVGL_TASK_STACK, NULL,
                                 LVGL_TASK_PRIO, NULL, LVGL_TASK_CORE) != pdPASS) {
         return ESP_FAIL;
     }
-
-    ESP_LOGI(TAG, "LVGL initialized");
     return ESP_OK;
 }
 

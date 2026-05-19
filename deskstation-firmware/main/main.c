@@ -150,12 +150,19 @@ void app_main(void)
     ESP_ERROR_CHECK(board_init(&panel, &touch));
     ESP_ERROR_CHECK(ui_init(panel, touch));
 
+    // Build all widgets BEFORE the LVGL renderer task starts — otherwise
+    // widget construction on core 0 races lvgl_task on core 1 and corrupts
+    // LVGL's internal TLSF heap (intermittent StoreProhibited panics).
     ui_build_main_screen();
+    ESP_ERROR_CHECK(ui_start_lvgl_task());
 
     ESP_ERROR_CHECK(usb_cdc_init());
     ESP_ERROR_CHECK(usb_cdc_start_tasks());
 
-    xTaskCreatePinnedToCore(ui_dispatch_task, "ui_dispatch", 8192, NULL, 3, NULL, 0);
+    // ui_dispatch_task mutates LVGL widgets when handling MSG_TOP_BAR etc.
+    // Pin it to core 1 (same as lvgl_task) so those mutations serialize
+    // naturally with rendering — no mutex needed.
+    xTaskCreatePinnedToCore(ui_dispatch_task, "ui_dispatch", 8192, NULL, 3, NULL, 1);
     xTaskCreatePinnedToCore(heartbeat_task, "heartbeat", 8192, NULL, 4, NULL, 0);
 
     s_last_rx_ms = now_ms();
