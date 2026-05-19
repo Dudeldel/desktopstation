@@ -167,7 +167,7 @@ bool protocol_parse(const char *line, parsed_msg_t *out)
         }
     } else if (out->type == MSG_SCREEN_2) {
         out->data.screen_2.count = 0;
-        cJSON *items = cJSON_GetObjectItem(data, "items");
+        cJSON *items = cJSON_GetObjectItem(data, "notifications");
         if (cJSON_IsArray(items)) {
             cJSON *item;
             cJSON_ArrayForEach(item, items) {
