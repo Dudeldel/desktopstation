@@ -26,6 +26,7 @@ from deskstation.bridge.protocol import (
     ScreenChangedMsg,
     TaskClickedMsg,
     ToastMsg,
+    TodoClickedMsg,
 )
 from deskstation.bridge.serial_bridge import SerialBridge, default_serial_factory
 from deskstation.clients.bitbucket import BitbucketClient
@@ -38,6 +39,7 @@ from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.engines.screen2_merger import Screen2Merger
 from deskstation.listeners.dbus_notifications import DbusNotificationListener
+from deskstation.listeners.todo_file import TodoFileListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
 from deskstation.pollers.calendar import CalendarPoller
@@ -91,6 +93,7 @@ class DispatchContext:
     pomodoro: PomodoroEngine
     merger: Screen2Merger | None = None
     calendar_poller: CalendarPoller | None = None
+    todo_listener: TodoFileListener | None = None
 
 
 def handle_hello(ctx: DispatchContext, env: HelloMsg) -> None:
@@ -164,6 +167,13 @@ async def handle_notification_action(
     await _xdg_open(url)
 
 
+async def handle_todo_clicked(ctx: DispatchContext, env: TodoClickedMsg) -> None:
+    if ctx.todo_listener is None:
+        log.warning("todo_clicked_no_listener", todo_id=env.data.id)
+        return
+    await ctx.todo_listener.toggle(env.data.id)
+
+
 async def handle_meeting_join(ctx: DispatchContext, env: MeetingJoinMsg) -> None:
     meeting_id = env.data.id
     if ctx.calendar_poller is None:
@@ -192,6 +202,7 @@ _HANDLERS: dict[type, Callable[..., Any]] = {
     NotificationActionMsg: handle_notification_action,
     NotificationClickedMsg: handle_notification_action,  # legacy alias
     MeetingJoinMsg: handle_meeting_join,
+    TodoClickedMsg: handle_todo_clicked,
 }
 
 
@@ -372,6 +383,16 @@ async def _run() -> None:
                 log.warning("dbus_to_merger_failed", error=str(exc))
             await asyncio.sleep(1.0)
 
+    todo_listener: TodoFileListener | None = None
+    if cfg.todo.enabled:
+        todo_listener = TodoFileListener(ui_state, cfg.todo.path)
+        try:
+            todo_listener.start()
+            log.info("todo_listener_active", path=str(cfg.todo.path))
+        except Exception as exc:
+            log.warning("todo_listener_failed", error=str(exc), error_type=type(exc).__name__)
+            todo_listener = None
+
     pomodoro = PomodoroEngine(
         ui_state,
         pomodoro_store,
@@ -421,6 +442,8 @@ async def _run() -> None:
         skip.add("screen_2")
     if dbus_listener is not None:
         skip.add("screen_2")
+    if todo_listener is not None:
+        skip.add("screen_4")
     if weather_poller is not None or claude_usage_poller is not None or clock_poller is not None:
         skip.add("top_bar")
     if skip:
@@ -447,6 +470,7 @@ async def _run() -> None:
         pomodoro=pomodoro,
         merger=screen2_merger,
         calendar_poller=calendar_poller,
+        todo_listener=todo_listener,
     )
 
     tasks = [
@@ -491,6 +515,8 @@ async def _run() -> None:
         await weather_client.aclose()
     if dbus_listener is not None:
         await dbus_listener.stop()
+    if todo_listener is not None:
+        todo_listener.stop()
     pomodoro_store.close()
     cache.close()
     await bridge.close()
