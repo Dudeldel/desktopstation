@@ -24,6 +24,7 @@ async def test_alternates_water_and_eyes() -> None:
     except asyncio.CancelledError:
         pass
 
+    assert len(pushed) >= 4, f"expected >= 4 ticks, got {len(pushed)}: {pushed}"
     assert pushed[:4] == ["water", "eyes", "water", "eyes"]
 
 
