@@ -305,6 +305,8 @@ async def test_set_weather_patches_only_weather_field() -> None:
     sent = await _drain_all_top_bar(bridge)
     assert sent[-1].data.weather == "18°C ☀"
     assert sent[-1].data.clock == "10:00"
+    assert sent[-1].data.date == "śr 20.05"
+    assert sent[-1].data.claude_usage == ""
     assert sent[-1].data.pomodoro_counter == 2
 
 
@@ -328,6 +330,9 @@ async def test_set_claude_usage_patches_only_claude_field() -> None:
     sent = await _drain_all_top_bar(bridge)
     assert sent[-1].data.claude_usage == "47%"
     assert sent[-1].data.weather == "18°C ☀"
+    assert sent[-1].data.clock == "10:00"
+    assert sent[-1].data.date == "śr 20.05"
+    assert sent[-1].data.pomodoro_counter == 0
 
 
 async def test_set_clock_patches_clock_and_date() -> None:

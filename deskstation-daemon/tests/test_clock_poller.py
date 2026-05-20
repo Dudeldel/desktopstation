@@ -3,22 +3,19 @@
 from datetime import datetime
 from unittest.mock import patch
 
-import pytest
-
 from deskstation.pollers.clock import ClockPoller, format_clock_date
 
 
-def test_format_clock_date_polish_abbrev():
+def test_format_clock_date_polish_abbrev() -> None:
     sample = datetime(2026, 5, 20, 10, 32)  # śr 20.05
     assert format_clock_date(sample) == ("10:32", "śr 20.05")
 
 
-@pytest.mark.asyncio
-async def test_clock_poller_pushes_one_tick(monkeypatch):
+async def test_clock_poller_pushes_one_tick() -> None:
     pushed: list[tuple[str, str]] = []
 
     class FakeUI:
-        def set_clock(self, clock, date):
+        def set_clock(self, clock: str, date: str) -> None:
             pushed.append((clock, date))
 
     poller = ClockPoller(FakeUI())  # type: ignore[arg-type]

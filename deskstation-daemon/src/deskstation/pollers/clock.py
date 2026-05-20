@@ -18,15 +18,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-_PL_DAY = {
-    "Mon": "pon",
-    "Tue": "wt",
-    "Wed": "śr",
-    "Thu": "czw",
-    "Fri": "pt",
-    "Sat": "sob",
-    "Sun": "ndz",
-}
+_PL_DAY_BY_IDX = ("pon", "wt", "śr", "czw", "pt", "sob", "ndz")
 
 
 def _now() -> datetime:
@@ -35,7 +27,7 @@ def _now() -> datetime:
 
 def format_clock_date(dt: datetime) -> tuple[str, str]:
     clock = dt.strftime("%H:%M")
-    date = f"{_PL_DAY[dt.strftime('%a')]} {dt.strftime('%d.%m')}"
+    date = f"{_PL_DAY_BY_IDX[dt.weekday()]} {dt.strftime('%d.%m')}"
     return clock, date
 
 
