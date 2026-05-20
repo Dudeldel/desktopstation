@@ -39,6 +39,7 @@ from deskstation.clients.jira import JiraClient
 from deskstation.clients.openmeteo import OpenMeteoClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
+from deskstation.engines.reminders import RemindersEngine
 from deskstation.engines.screen2_merger import Screen2Merger
 from deskstation.engines.standup import StandupEngine
 from deskstation.executors.macros import MacroExecutor
@@ -447,6 +448,15 @@ async def _run() -> None:
         worklog=jira_client.add_worklog if jira_client is not None else None,
     )
 
+    # ---- M6.7: water/eyes reminders engine (idle-state only) ----
+    reminders: RemindersEngine | None = None
+    if cfg.reminders.enabled:
+        reminders = RemindersEngine(
+            ui_state,
+            pomodoro,
+            interval_sec=cfg.reminders.interval_sec,
+        )
+
     # ---- M6.2: weather poller ----
     weather_client: OpenMeteoClient | None = None
     weather_poller: WeatherPoller | None = None
@@ -547,6 +557,8 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(weather_poller.run_forever()))
     if claude_usage_poller is not None:
         tasks.append(asyncio.create_task(claude_usage_poller.run_forever()))
+    if reminders is not None:
+        tasks.append(asyncio.create_task(reminders.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")

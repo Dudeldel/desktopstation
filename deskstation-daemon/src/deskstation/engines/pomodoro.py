@@ -86,6 +86,10 @@ class PomodoroEngine:
 
     # ------------------------------------------------------------------ inspection
 
+    def is_focus_state(self) -> bool:
+        """True iff pomodoro is in any non-idle state — used by the reminders engine."""
+        return self._s.state != "idle"
+
     def snapshot(self) -> PomodoroStateData:
         """Return the current state as the same shape the firmware receives."""
         return PomodoroStateData(
