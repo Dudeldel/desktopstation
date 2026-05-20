@@ -344,6 +344,17 @@ class MacroTriggerMsg(BaseModel):
     data: MacroTriggerData
 
 
+class StandupRequestData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class StandupRequestMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["standup_request"] = "standup_request"
+    data: StandupRequestData = Field(default_factory=StandupRequestData)
+
+
 PomodoroAction = Literal["pause", "resume", "stop_with_log", "cancel", "start_loose", "skip_break"]
 
 
@@ -391,6 +402,7 @@ Envelope = Annotated[
     | NotificationActionMsg
     | TodoClickedMsg
     | MacroTriggerMsg
+    | StandupRequestMsg
     | PomodoroActionMsg
     | FullscreenDismissMsg,
     Field(discriminator="type"),

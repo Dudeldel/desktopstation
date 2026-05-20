@@ -183,6 +183,55 @@ class BitbucketClient:
         )
         return _parse_prs(payload, kind="mine")
 
+    async def list_my_merged_prs_since(
+        self,
+        username: str,
+        since: datetime,
+        repos: list[str],
+    ) -> list[Pr]:
+        """Merged PRs authored by ``username`` whose updated_on >= since.
+
+        Bitbucket has no global "PRs by author" endpoint that includes the
+        MERGED state across all repos, so this iterates the configured repos.
+        Errors per repo are logged and swallowed (except auth errors, which
+        propagate); the call returns whatever completed so a single 401 doesn't
+        blank a multi-repo standup. No cache fallback — a stale standup brief
+        is worse than an empty one.
+        """
+        results: list[Pr] = []
+        since_iso = since.isoformat()
+        for repo in repos:
+            q = f'state="MERGED" AND author.username="{username}" AND updated_on >= "{since_iso}"'
+            url = f"{self._base_url}/2.0/repositories/{self._workspace}/{repo}/pullrequests"
+            params: dict[str, Any] = {"q": q, "pagelen": 20}
+            try:
+                resp = await self._http.get(url, params=params, auth=self._auth)
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in (
+                    httpx.codes.UNAUTHORIZED,
+                    httpx.codes.FORBIDDEN,
+                ):
+                    raise BitbucketAuthError(
+                        f"Bitbucket auth failed: {exc.response.status_code}"
+                    ) from exc
+                log.warning(
+                    "bitbucket_merged_prs_failed",
+                    repo=repo,
+                    status=exc.response.status_code,
+                )
+                continue
+            except httpx.HTTPError as exc:
+                log.warning(
+                    "bitbucket_merged_prs_transient",
+                    repo=repo,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                continue
+            results.extend(_parse_prs(resp.content, kind="mine"))
+        return results
+
     async def list_review_prs(self, username: str, repos: list[str]) -> list[Pr]:
         results: list[Pr] = []
         for repo in repos:

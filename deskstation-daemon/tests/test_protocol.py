@@ -368,6 +368,11 @@ def test_parse_macro_trigger() -> None:
     assert env.data.name == "git_status"
 
 
+def test_parse_standup_request() -> None:
+    env = parse_envelope('{"v":1,"type":"standup_request","data":{}}')
+    assert env.type == "standup_request"
+
+
 def test_parse_pomodoro_action_all_variants() -> None:
     for action in ("pause", "resume", "stop_with_log", "cancel", "start_loose", "skip_break"):
         line = f'{{"v":1,"type":"pomodoro_action","data":{{"action":"{action}"}}}}'

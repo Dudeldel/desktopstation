@@ -25,6 +25,7 @@ from deskstation.bridge.protocol import (
     NotificationClickedMsg,
     PomodoroActionMsg,
     ScreenChangedMsg,
+    StandupRequestMsg,
     TaskClickedMsg,
     ToastMsg,
     TodoClickedMsg,
@@ -39,6 +40,7 @@ from deskstation.clients.openmeteo import OpenMeteoClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.engines.screen2_merger import Screen2Merger
+from deskstation.engines.standup import StandupEngine
 from deskstation.executors.macros import MacroExecutor
 from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.listeners.todo_file import TodoFileListener
@@ -97,6 +99,7 @@ class DispatchContext:
     calendar_poller: CalendarPoller | None = None
     todo_listener: TodoFileListener | None = None
     macros: MacroExecutor | None = None
+    standup: StandupEngine | None = None
 
 
 def handle_hello(ctx: DispatchContext, env: HelloMsg) -> None:
@@ -184,6 +187,13 @@ async def handle_macro_trigger(ctx: DispatchContext, env: MacroTriggerMsg) -> No
     await ctx.macros.run_by_id(env.data.name)
 
 
+async def handle_standup_request(ctx: DispatchContext, env: StandupRequestMsg) -> None:
+    if ctx.standup is None:
+        log.warning("standup_request_no_engine")
+        return
+    await ctx.standup.build_and_push()
+
+
 async def handle_meeting_join(ctx: DispatchContext, env: MeetingJoinMsg) -> None:
     meeting_id = env.data.id
     if ctx.calendar_poller is None:
@@ -214,6 +224,7 @@ _HANDLERS: dict[type, Callable[..., Any]] = {
     MeetingJoinMsg: handle_meeting_join,
     TodoClickedMsg: handle_todo_clicked,
     MacroTriggerMsg: handle_macro_trigger,
+    StandupRequestMsg: handle_standup_request,
 }
 
 
@@ -411,6 +422,24 @@ async def _run() -> None:
             timeout_sec=cfg.macros.timeout_sec,
         )
 
+    # ---- M6.6: on-demand standup brief assembler ----
+    standup_engine: StandupEngine | None = None
+    if cfg.standup.enabled:
+        email = cfg.standup.git_author_email or (
+            secrets.jira.email if secrets.jira is not None else ""
+        )
+        bb_user = ""
+        if secrets.bitbucket is not None:
+            bb_user = secrets.bitbucket.username or secrets.bitbucket.email.split("@")[0]
+        standup_engine = StandupEngine(
+            ui_state,
+            jira_client=jira_client,
+            bitbucket_client=bitbucket_client,
+            bitbucket_username=bb_user,
+            repos=cfg.standup.repos,
+            git_author_email=email,
+        )
+
     pomodoro = PomodoroEngine(
         ui_state,
         pomodoro_store,
@@ -490,6 +519,7 @@ async def _run() -> None:
         calendar_poller=calendar_poller,
         todo_listener=todo_listener,
         macros=macros,
+        standup=standup_engine,
     )
 
     tasks = [
