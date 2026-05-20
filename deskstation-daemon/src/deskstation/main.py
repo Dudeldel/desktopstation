@@ -41,6 +41,7 @@ from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
 from deskstation.pollers.calendar import CalendarPoller
+from deskstation.pollers.claude_usage import ClaudeUsagePoller
 from deskstation.pollers.clock import ClockPoller
 from deskstation.pollers.gchat import GoogleChatPoller
 from deskstation.pollers.gmail import GmailPoller
@@ -391,11 +392,20 @@ async def _run() -> None:
             interval_sec=cfg.weather.poll_interval_sec,
         )
 
+    # ---- M6.3: claude usage poller (ccusage subprocess) ----
+    claude_usage_poller: ClaudeUsagePoller | None = None
+    if cfg.claude_usage.enabled:
+        claude_usage_poller = ClaudeUsagePoller(
+            ui_state,
+            command=cfg.claude_usage.command,
+            interval_sec=cfg.claude_usage.poll_interval_sec,
+        )
+
     # M6.1+: when any real top-bar source is active, the mock TopBarPoller
     # must be skipped — but the panel still needs a ticking clock, so start
     # the real ClockPoller instead.
     clock_poller: ClockPoller | None = None
-    if weather_poller is not None:
+    if weather_poller is not None or claude_usage_poller is not None:
         clock_poller = ClockPoller(ui_state)
 
     # When real pollers are active, suppress the matching M2 mock pollers so
@@ -411,7 +421,7 @@ async def _run() -> None:
         skip.add("screen_2")
     if dbus_listener is not None:
         skip.add("screen_2")
-    if weather_poller is not None or clock_poller is not None:
+    if weather_poller is not None or claude_usage_poller is not None or clock_poller is not None:
         skip.add("top_bar")
     if skip:
         log.info("mocks_skip_applied", skip=sorted(skip))
@@ -462,6 +472,8 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(clock_poller.run_forever()))
     if weather_poller is not None:
         tasks.append(asyncio.create_task(weather_poller.run_forever()))
+    if claude_usage_poller is not None:
+        tasks.append(asyncio.create_task(claude_usage_poller.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")
