@@ -17,8 +17,12 @@ class WeatherSnapshot:
 
 class OpenMeteoClient:
     def __init__(self, http_client: httpx.AsyncClient | None = None) -> None:
-        self._http = http_client or httpx.AsyncClient(timeout=10.0)
-        self._owns_http = http_client is None
+        if http_client is not None:
+            self._http = http_client
+            self._owns_http = False
+        else:
+            self._http = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
+            self._owns_http = True
 
     async def aclose(self) -> None:
         if self._owns_http:

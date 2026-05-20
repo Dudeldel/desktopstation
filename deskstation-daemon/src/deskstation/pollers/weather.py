@@ -8,6 +8,7 @@ WMO code → icon mapping (broad buckets):
   51-67       → 🌧
   71-86       → 🌨
   95-99       → ⛈
+  (anything else) → ☁  (defensive fallback; WMO codes are 0-99)
 
 Temperature rounds to integer °C.
 """
@@ -66,7 +67,11 @@ class WeatherPoller:
         try:
             snap = await self._client.current(self._lat, self._lon)
         except httpx.HTTPError as exc:
-            log.warning("weather_tick_failed", error=str(exc))
+            log.warning(
+                "weather_tick_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
             return
         self._ui.set_weather(format_weather(snap))
 
