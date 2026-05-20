@@ -19,6 +19,7 @@ from deskstation.bridge.protocol import (
     FullscreenDismissMsg,
     HeartbeatMsg,
     HelloMsg,
+    MacroTriggerMsg,
     MeetingJoinMsg,
     NotificationActionMsg,
     NotificationClickedMsg,
@@ -38,6 +39,7 @@ from deskstation.clients.openmeteo import OpenMeteoClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.engines.screen2_merger import Screen2Merger
+from deskstation.executors.macros import MacroExecutor
 from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.listeners.todo_file import TodoFileListener
 from deskstation.logging_setup import configure_logging
@@ -94,6 +96,7 @@ class DispatchContext:
     merger: Screen2Merger | None = None
     calendar_poller: CalendarPoller | None = None
     todo_listener: TodoFileListener | None = None
+    macros: MacroExecutor | None = None
 
 
 def handle_hello(ctx: DispatchContext, env: HelloMsg) -> None:
@@ -174,6 +177,13 @@ async def handle_todo_clicked(ctx: DispatchContext, env: TodoClickedMsg) -> None
     await ctx.todo_listener.toggle(env.data.id)
 
 
+async def handle_macro_trigger(ctx: DispatchContext, env: MacroTriggerMsg) -> None:
+    if ctx.macros is None:
+        log.warning("macro_trigger_no_executor", macro_id=env.data.name)
+        return
+    await ctx.macros.run_by_id(env.data.name)
+
+
 async def handle_meeting_join(ctx: DispatchContext, env: MeetingJoinMsg) -> None:
     meeting_id = env.data.id
     if ctx.calendar_poller is None:
@@ -203,6 +213,7 @@ _HANDLERS: dict[type, Callable[..., Any]] = {
     NotificationClickedMsg: handle_notification_action,  # legacy alias
     MeetingJoinMsg: handle_meeting_join,
     TodoClickedMsg: handle_todo_clicked,
+    MacroTriggerMsg: handle_macro_trigger,
 }
 
 
@@ -393,6 +404,13 @@ async def _run() -> None:
             log.warning("todo_listener_failed", error=str(exc), error_type=type(exc).__name__)
             todo_listener = None
 
+    macros: MacroExecutor | None = None
+    if cfg.macros.enabled:
+        macros = MacroExecutor(
+            cfg.macros.definitions,
+            timeout_sec=cfg.macros.timeout_sec,
+        )
+
     pomodoro = PomodoroEngine(
         ui_state,
         pomodoro_store,
@@ -471,6 +489,7 @@ async def _run() -> None:
         merger=screen2_merger,
         calendar_poller=calendar_poller,
         todo_listener=todo_listener,
+        macros=macros,
     )
 
     tasks = [
