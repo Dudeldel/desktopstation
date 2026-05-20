@@ -165,6 +165,94 @@ dbus:
 - `gmail_request_failed status=403` (or `401`) log line → the OAuth token may need to be re-issued. Re-run `uv run deskstation auth-google`.
 - A notification tap doesn't trigger `xdg-open` → check the `id` is still in scope. The merger caps at 16 items and prunes older entries on every update; a notification id stops resolving once it's been evicted.
 
+## M6 — Todo, macros, standup, reminders, weather, Claude usage
+
+M6 layers six new sources on top of M5. Everything is opt-in via `config.yaml`; with no config the daemon behaves exactly like the M5 build.
+
+- **Weather** (`weather.enabled: true` + latitude/longitude) — patches the top bar
+  every 15 min via the keyless OpenMeteo `/v1/forecast` endpoint (no API key
+  needed). WMO code → emoji icon mapping; temperature rounds to an integer °C.
+- **Claude usage** (`claude_usage.enabled: true`) — shells out to the configured
+  argv (default `["ccusage", "--json"]`) every 5 min and parses out today's spend
+  for the top bar. Auto-disables (logs once) on missing binary so the daemon
+  doesn't spam logs on hosts without `ccusage` installed.
+- **Todo file** (`todo.enabled: true` + `todo.path`) — `watchdog` reparses the
+  Markdown file on every save and pushes `screen_4`. Tapping a checkbox on the
+  device round-trips through `todo_clicked` → `TodoFileListener.toggle` →
+  in-place rewrite. The rewrite is bytes-level so indent and Windows CRLF line
+  endings survive untouched.
+- **Macros** (`macros.enabled: true` + `macros.definitions`) — each macro has an
+  `id`, `label`, `icon`, and an argv list. The firmware can only invoke macros
+  **by `id`** (no argv injection from the ESP). Commands run sequentially with
+  `shell=False` and a per-command timeout (`macros.timeout_sec`, default 10 s);
+  a non-zero rc is logged but execution continues to the next command. A bad
+  binary (e.g. `FileNotFoundError`) is also logged-and-skipped, never raised.
+- **Standup brief** (`standup.enabled: true` + `standup.repos`) — on a
+  `standup_request` event from the panel, builds a 24 h brief from Jira (issues
+  resolved by the current user in the last 24 h), Bitbucket (PRs you merged in
+  the last 24 h), and `git log --author=<email>` across the configured local
+  repos. Pushes a `fullscreen{kind=standup}` snapshot. The git command has its
+  own 10 s timeout so a hung repo can't park the dispatch handler. Each source
+  failure is isolated via `asyncio.gather(return_exceptions=True)` so one dead
+  source doesn't blank the brief.
+- **Reminders** (`reminders.enabled: true`) — water/eyes alternating fullscreen
+  every `reminders.interval_sec` (default 25 min) **while pomodoro is idle**.
+  Silent during active/paused/break states (the break overlay already covers
+  those).
+
+### M6.1 top-bar source dispatch
+
+When `weather.enabled` or `claude_usage.enabled` is true, the daemon swaps the
+M2 mock `TopBarPoller` for a real `ClockPoller` (minute-resolution clock + date)
+and uses dedicated per-field setters (`UIState.set_weather`,
+`set_claude_usage`, `set_clock`) so the three sources can patch the top bar
+independently without clobbering one another.
+
+### Config snippet
+
+```yaml
+weather:
+  enabled: true
+  latitude: 52.23
+  longitude: 21.01
+  poll_interval_sec: 900
+claude_usage:
+  enabled: true
+  argv: ["ccusage", "--json"]
+  poll_interval_sec: 300
+todo:
+  enabled: true
+  path: "~/todo.md"
+macros:
+  enabled: true
+  timeout_sec: 10.0
+  definitions:
+    - id: "lock"
+      label: "Lock screen"
+      icon: "🔒"
+      commands: [["loginctl", "lock-session"]]
+standup:
+  enabled: true
+  git_author_email: "you@example.com"
+  repos:
+    - "~/code/service-a"
+    - "~/code/service-b"
+reminders:
+  enabled: true
+  interval_sec: 1500   # 25 min
+```
+
+### Known M6 limitations
+
+- The `fullscreen` slot in `UIState` is **single-tenant**. The standup brief,
+  the pomodoro break overlay, and the reminders engine all write to the same
+  `UIState._fullscreen`. A water reminder firing while a standup brief is on
+  screen will silently overwrite it. A priority-aware overlay model is out of
+  M6 scope; the current workaround is to disable reminders during periods when
+  you expect to be reading a standup brief, or to dismiss the standup before
+  it can be clobbered. A real fix needs a small priority + queue layer on the
+  fullscreen slot.
+
 ## Status
 
-M0 + M1 + M2 + M4 + M5 complete: scaffold + USB transport, UI screens with mocks, pomodoro engine, live Jira + Bitbucket pollers with cache + worklog hook, Gmail + Chat + Calendar pollers + dbus notification listener feeding a merged `screen_2`. See `docs/superpowers/plans/` and the roadmap for what comes next.
+M0 + M1 + M2 + M4 + M5 + M6 complete: scaffold + USB transport, UI screens with mocks, pomodoro engine, live Jira + Bitbucket pollers with cache + worklog hook, Gmail + Chat + Calendar pollers + dbus notification listener feeding a merged `screen_2`, plus M6's todo watcher, config-declared macros, on-demand standup brief, idle-state water/eyes reminders, keyless OpenMeteo weather, and ccusage-driven Claude usage in the top bar. See `docs/superpowers/plans/` and the roadmap for what comes next.
