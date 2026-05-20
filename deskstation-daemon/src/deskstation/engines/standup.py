@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from deskstation.bridge.protocol import FullscreenData
+from deskstation.clients.bitbucket import BitbucketAuthError
 from deskstation.clients.jira import JiraAuthError, JiraTransientError
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ log = structlog.get_logger(__name__)
 GitLogFn = Callable[[Path, datetime, datetime, str], Awaitable[list[str]]]
 
 STANDUP_JQL = "assignee = currentUser() AND resolved >= -1d ORDER BY resolved DESC"
+_MAX_COMMITS_PER_REPO = 5
 
 
 async def _default_git_log(
@@ -57,9 +59,23 @@ async def _default_git_log(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, _stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=10.0,
+        )
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        log.warning("git_log_timeout", repo=str(repo))
+        return []
     if proc.returncode != 0:
-        log.warning("git_log_nonzero", repo=str(repo), rc=proc.returncode)
+        log.warning(
+            "git_log_nonzero",
+            repo=str(repo),
+            rc=proc.returncode,
+            stderr=stderr[:500].decode("utf-8", errors="replace"),
+        )
         return []
     return [line for line in stdout.decode("utf-8").splitlines() if line.strip()]
 
@@ -116,6 +132,9 @@ class StandupEngine:
                 since,
                 [r.name for r in self._repos],
             )
+        except BitbucketAuthError as exc:
+            log.warning("standup_bitbucket_auth_failed", error=str(exc))
+            return []
         except Exception as exc:
             log.warning(
                 "standup_bitbucket_failed",
@@ -138,21 +157,37 @@ class StandupEngine:
                     error_type=type(exc).__name__,
                 )
                 continue
-            out.extend(f"git — {line}" for line in lines[:5])
+            shown = lines[:_MAX_COMMITS_PER_REPO]
+            out.extend(f"git — {line}" for line in shown)
+            extra = len(lines) - _MAX_COMMITS_PER_REPO
+            if extra > 0:
+                out.append(f"git — … (+{extra} more in {repo.name})")
         return out
 
     async def build_and_push(self, now: datetime | None = None) -> None:
         now = now or datetime.now(UTC)
         since = now - timedelta(hours=24)
-        jira_lines, bb_lines, git_lines = await asyncio.gather(
+        results = await asyncio.gather(
             self._jira_lines(),
             self._bitbucket_lines(since),
             self._git_lines(since, now),
+            return_exceptions=True,
         )
         bullets: list[str] = []
-        bullets.extend(jira_lines)
-        bullets.extend(bb_lines)
-        bullets.extend(git_lines)
+        for source_name, result in zip(
+            ("jira", "bitbucket", "git"),
+            results,
+            strict=True,
+        ):
+            if isinstance(result, BaseException):
+                log.warning(
+                    "standup_source_unhandled_exception",
+                    source=source_name,
+                    error=str(result),
+                    error_type=type(result).__name__,
+                )
+                continue
+            bullets.extend(result)
         if not bullets:
             message = "Brak aktywności w ciągu ostatnich 24 h."
         else:
@@ -162,8 +197,6 @@ class StandupEngine:
                 kind="standup",
                 title="Standup — wczoraj",
                 message=message,
-                submessage="",
-                duration_sec=0,
                 dismissible=True,
             )
         )

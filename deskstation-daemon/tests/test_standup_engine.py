@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 from deskstation.clients.bitbucket import Pr
-from deskstation.clients.jira import Issue
+from deskstation.clients.jira import Issue, JiraAuthError
 from deskstation.engines.standup import StandupEngine
 
 
@@ -103,3 +103,72 @@ async def test_build_brief_handles_empty_sources() -> None:
     await eng.build_and_push()
     assert pushed[0].kind == "standup"
     assert pushed[0].message  # non-empty
+
+
+async def test_jira_failure_doesnt_blank_other_sources() -> None:
+    jira_client = AsyncMock()
+    jira_client.search.side_effect = JiraAuthError("nope")
+    bb_client = AsyncMock()
+    bb_client.list_my_merged_prs_since.return_value = []
+
+    async def fake_git_log(
+        repo: Path,
+        since: datetime,
+        until: datetime,
+        author_email: str,
+    ) -> list[str]:
+        return ["fix(thing): do it"]
+
+    pushed: list = []
+
+    class FakeUI:
+        def set_fullscreen(self, data) -> None:
+            pushed.append(data)
+
+    eng = StandupEngine(
+        FakeUI(),  # type: ignore[arg-type]
+        jira_client=jira_client,
+        bitbucket_client=bb_client,
+        bitbucket_username="me",
+        repos=[Path("/tmp/repo")],
+        git_author_email="me@example.com",
+        git_log=fake_git_log,
+    )
+    await eng.build_and_push()
+    assert len(pushed) == 1
+    assert "fix(thing): do it" in pushed[0].message
+
+
+async def test_git_log_raise_still_pushes_other_sources() -> None:
+    jira_client = AsyncMock()
+    jira_client.search.return_value = []
+    bb_client = AsyncMock()
+    bb_client.list_my_merged_prs_since.return_value = []
+
+    async def raising_git_log(
+        repo: Path,
+        since: datetime,
+        until: datetime,
+        author_email: str,
+    ) -> list[str]:
+        raise RuntimeError("boom")
+
+    pushed: list = []
+
+    class FakeUI:
+        def set_fullscreen(self, data) -> None:
+            pushed.append(data)
+
+    eng = StandupEngine(
+        FakeUI(),  # type: ignore[arg-type]
+        jira_client=jira_client,
+        bitbucket_client=bb_client,
+        bitbucket_username="me",
+        repos=[Path("/tmp/repo")],
+        git_author_email="me@example.com",
+        git_log=raising_git_log,
+    )
+    await eng.build_and_push()
+    # Push happens even though git_log raised; message is the empty fallback.
+    assert len(pushed) == 1
+    assert "Brak" in pushed[0].message
