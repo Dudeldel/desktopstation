@@ -48,6 +48,13 @@ class TodoFileListener:
     def __init__(self, ui_state: UIState, path: Path) -> None:
         self._ui = ui_state
         self._path = Path(path).expanduser()
+        # Pre-resolve the watched path so _on_fs_event (hot path, runs in
+        # the watchdog thread for every fs event in the parent dir) doesn't
+        # incur a syscall per event.
+        try:
+            self._target_resolved: Path | None = self._path.resolve()
+        except OSError:
+            self._target_resolved = None
         self._items: list[TodoLine] = []
         self._observer: BaseObserver | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -85,10 +92,15 @@ class TodoFileListener:
     def start(self) -> None:
         if self._observer is not None:
             return
+        watch_dir = self._path.parent
+        if not watch_dir.exists():
+            raise FileNotFoundError(
+                f"todo watch directory does not exist: {watch_dir} "
+                f"(create it or fix config.todo.path)"
+            )
         self._loop = asyncio.get_running_loop()
         self._observer = Observer()
-        watch_dir = str(self._path.parent)
-        self._observer.schedule(_Handler(self), watch_dir, recursive=False)
+        self._observer.schedule(_Handler(self), str(watch_dir), recursive=False)
         self._observer.start()
         self.reparse_now()
 
@@ -100,20 +112,19 @@ class TodoFileListener:
 
     # Internal — called from the watchdog thread.
     def _on_fs_event(self, event: FileSystemEvent) -> None:
+        target = self._target_resolved
+        if target is None:
+            return
         try:
             ev_path = Path(_as_str(event.src_path)).resolve()
         except OSError:
             return
-        try:
-            target = self._path.resolve()
-        except OSError:
-            return
         if ev_path != target:
-            dest = _as_str(getattr(event, "dest_path", ""))
-            if not dest:
+            dest_raw = getattr(event, "dest_path", "")
+            if not dest_raw:
                 return
             try:
-                if Path(dest).resolve() != target:
+                if Path(_as_str(dest_raw)).resolve() != target:
                     return
             except OSError:
                 return

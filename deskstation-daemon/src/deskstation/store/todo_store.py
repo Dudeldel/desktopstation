@@ -55,9 +55,11 @@ def parse_todo_file(path: Path) -> list[TodoLine]:
 def rewrite_line_toggled(path: Path, line_no: int, want_done: bool) -> None:
     """Rewrite a single line's checkbox in place. Preserves indent + EOLs.
 
-    Bytes-level so Windows CRLF / mixed endings survive untouched. Raises
-    FileNotFoundError if path is missing; IndexError if line_no is out of range;
-    ValueError if the target line is not a parseable todo entry.
+    Bytes-level so Windows CRLF / mixed CRLF+LF endings survive untouched.
+    Classic-Mac CR-only line endings are NOT recognised as terminators
+    (the whole file becomes one line). Raises FileNotFoundError if path is
+    missing; IndexError if line_no is out of range; ValueError if the
+    target line is not a parseable todo entry.
     """
     raw = path.read_bytes()
     parts: list[bytes] = []
