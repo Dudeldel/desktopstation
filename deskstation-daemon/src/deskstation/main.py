@@ -33,6 +33,7 @@ from deskstation.clients.gcal import GoogleCalendarClient
 from deskstation.clients.gchat import GoogleChatClient
 from deskstation.clients.gmail import GmailClient
 from deskstation.clients.jira import JiraClient
+from deskstation.clients.openmeteo import OpenMeteoClient
 from deskstation.config import Config, load_config
 from deskstation.engines.pomodoro import PomodoroEngine
 from deskstation.engines.screen2_merger import Screen2Merger
@@ -40,10 +41,12 @@ from deskstation.listeners.dbus_notifications import DbusNotificationListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
 from deskstation.pollers.calendar import CalendarPoller
+from deskstation.pollers.clock import ClockPoller
 from deskstation.pollers.gchat import GoogleChatPoller
 from deskstation.pollers.gmail import GmailPoller
 from deskstation.pollers.jira import JiraPoller
 from deskstation.pollers.mock import start_all_mocks
+from deskstation.pollers.weather import WeatherPoller
 from deskstation.secrets import load_secrets
 from deskstation.store.api_cache import ApiCache
 from deskstation.store.pomodoro_store import PomodoroStore
@@ -375,6 +378,26 @@ async def _run() -> None:
         worklog=jira_client.add_worklog if jira_client is not None else None,
     )
 
+    # ---- M6.2: weather poller ----
+    weather_client: OpenMeteoClient | None = None
+    weather_poller: WeatherPoller | None = None
+    if cfg.weather.enabled:
+        weather_client = OpenMeteoClient()
+        weather_poller = WeatherPoller(
+            ui_state,
+            weather_client,
+            latitude=cfg.weather.latitude,
+            longitude=cfg.weather.longitude,
+            interval_sec=cfg.weather.poll_interval_sec,
+        )
+
+    # M6.1+: when any real top-bar source is active, the mock TopBarPoller
+    # must be skipped — but the panel still needs a ticking clock, so start
+    # the real ClockPoller instead.
+    clock_poller: ClockPoller | None = None
+    if weather_poller is not None:
+        clock_poller = ClockPoller(ui_state)
+
     # When real pollers are active, suppress the matching M2 mock pollers so
     # they don't overwrite real screen data with synthetic fixtures.
     skip: set[str] = set()
@@ -388,6 +411,8 @@ async def _run() -> None:
         skip.add("screen_2")
     if dbus_listener is not None:
         skip.add("screen_2")
+    if weather_poller is not None or clock_poller is not None:
+        skip.add("top_bar")
     if skip:
         log.info("mocks_skip_applied", skip=sorted(skip))
 
@@ -433,6 +458,10 @@ async def _run() -> None:
         tasks.append(asyncio.create_task(calendar_poller.run_forever()))
     if dbus_listener is not None:
         tasks.append(asyncio.create_task(_dbus_to_merger()))
+    if clock_poller is not None:
+        tasks.append(asyncio.create_task(clock_poller.run_forever()))
+    if weather_poller is not None:
+        tasks.append(asyncio.create_task(weather_poller.run_forever()))
 
     await stop_event.wait()
     log.info("shutting_down")
@@ -446,6 +475,8 @@ async def _run() -> None:
         await bitbucket_client.aclose()
     if calendar_client is not None:
         await calendar_client.aclose()
+    if weather_client is not None:
+        await weather_client.aclose()
     if dbus_listener is not None:
         await dbus_listener.stop()
     pomodoro_store.close()
