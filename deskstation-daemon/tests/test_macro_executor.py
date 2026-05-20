@@ -39,3 +39,20 @@ async def test_run_by_id_continues_on_nonzero_exit() -> None:
     )
     await ex.run_by_id("m")
     assert calls == [["false"], ["echo", "ok"]]
+
+
+async def test_run_by_id_continues_when_command_raises() -> None:
+    calls: list[list[str]] = []
+
+    async def fake_run_argv(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
+        calls.append(argv)
+        if argv == ["missing"]:
+            raise FileNotFoundError("missing")
+        return 0, b"", b""
+
+    ex = MacroExecutor(
+        [MacroDef(id="m", label="M", commands=[["missing"], ["echo", "ok"]])],
+        run_argv=fake_run_argv,
+    )
+    await ex.run_by_id("m")
+    assert calls == [["missing"], ["echo", "ok"]]

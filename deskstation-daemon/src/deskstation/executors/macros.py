@@ -64,6 +64,8 @@ class MacroExecutor:
             except Exception as exc:
                 # A bad command (e.g., missing binary → FileNotFoundError)
                 # should not poison the rest of a multi-step macro.
+                # CancelledError is a BaseException (not Exception) so the
+                # shutdown cancellation chain still propagates correctly.
                 log.warning(
                     "macro_command_exception",
                     argv=argv,
