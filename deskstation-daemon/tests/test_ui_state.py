@@ -38,6 +38,13 @@ def _make_top_bar(clock: str = "12:00") -> TopBarData:
     )
 
 
+async def _drain_pending(ui: UIState) -> None:
+    """Await every currently scheduled UIState send task."""
+    pending = list(ui._pending.values())
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
 # ---------------------------------------------------------------------------
 # Setter dispatch tests — one per setter
 # ---------------------------------------------------------------------------
@@ -261,3 +268,88 @@ async def test_set_screen_3_standup() -> None:
     msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
     assert isinstance(msg, Screen3Msg)
     assert msg.data.standup[0].done is True
+
+
+# ---------------------------------------------------------------------------
+# Per-field top_bar setters (M6.1)
+# ---------------------------------------------------------------------------
+
+
+async def _drain_all_top_bar(bridge: MockBridge) -> list[TopBarMsg]:
+    """Drain all messages on bridge, returning only TopBarMsg envelopes."""
+    out: list[TopBarMsg] = []
+    while not bridge._outbound.empty():
+        msg = await bridge.received()
+        if isinstance(msg, TopBarMsg):
+            out.append(msg)
+    return out
+
+
+async def test_set_weather_patches_only_weather_field() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_top_bar(
+        TopBarData(
+            clock="10:00",
+            date="śr 20.05",
+            weather="",
+            claude_usage="",
+            pomodoro_counter=2,
+        )
+    )
+    await _drain_pending(ui)
+
+    ui.set_weather("18°C ☀")
+    await _drain_pending(ui)
+
+    sent = await _drain_all_top_bar(bridge)
+    assert sent[-1].data.weather == "18°C ☀"
+    assert sent[-1].data.clock == "10:00"
+    assert sent[-1].data.pomodoro_counter == 2
+
+
+async def test_set_claude_usage_patches_only_claude_field() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_top_bar(
+        TopBarData(
+            clock="10:00",
+            date="śr 20.05",
+            weather="18°C ☀",
+            claude_usage="",
+            pomodoro_counter=0,
+        )
+    )
+    await _drain_pending(ui)
+
+    ui.set_claude_usage("47%")
+    await _drain_pending(ui)
+
+    sent = await _drain_all_top_bar(bridge)
+    assert sent[-1].data.claude_usage == "47%"
+    assert sent[-1].data.weather == "18°C ☀"
+
+
+async def test_set_clock_patches_clock_and_date() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_top_bar(
+        TopBarData(
+            clock="--:--",
+            date="",
+            weather="18°C ☀",
+            claude_usage="47%",
+            pomodoro_counter=3,
+        )
+    )
+    await _drain_pending(ui)
+
+    ui.set_clock(clock="10:32", date="śr 20.05")
+    await _drain_pending(ui)
+
+    sent = await _drain_all_top_bar(bridge)
+    assert sent[-1].data.clock == "10:32"
+    assert sent[-1].data.date == "śr 20.05"
+    assert sent[-1].data.weather == "18°C ☀"
+    assert sent[-1].data.claude_usage == "47%"
+    assert sent[-1].data.pomodoro_counter == 3

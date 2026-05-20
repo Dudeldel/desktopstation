@@ -94,6 +94,21 @@ class UIState:
         self._top_bar = self._top_bar.model_copy(update={"pomodoro_counter": n})
         self._schedule_send("top_bar")
 
+    def set_weather(self, weather: str) -> None:
+        """Patch only the weather field on the existing top_bar snapshot."""
+        self._top_bar = self._top_bar.model_copy(update={"weather": weather})
+        self._schedule_send("top_bar")
+
+    def set_claude_usage(self, claude_usage: str) -> None:
+        """Patch only the Claude usage field on the existing top_bar snapshot."""
+        self._top_bar = self._top_bar.model_copy(update={"claude_usage": claude_usage})
+        self._schedule_send("top_bar")
+
+    def set_clock(self, clock: str, date: str) -> None:
+        """Patch clock + date on the existing top_bar snapshot."""
+        self._top_bar = self._top_bar.model_copy(update={"clock": clock, "date": date})
+        self._schedule_send("top_bar")
+
     def set_screen_1(
         self,
         today_tasks: list[JiraTask] | None = None,

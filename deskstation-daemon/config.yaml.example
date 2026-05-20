@@ -65,3 +65,46 @@ dbus:
     - "Messenger*"
     - "Slack*"
   buffer_size: 32
+
+# ---- M6: weather (keyless OpenMeteo) ----
+weather:
+  enabled: false
+  latitude: 52.2297                # Warsaw center; override with your location
+  longitude: 21.0122
+  poll_interval_sec: 900           # 15 min
+
+# ---- M6: Claude usage (shells out to ccusage) ----
+claude_usage:
+  enabled: false
+  command: ["ccusage", "--json"]   # any tool whose stdout JSON has {"percent_today": <0-100>}
+  poll_interval_sec: 300           # 5 min
+
+# ---- M6: todo.md watcher ----
+todo:
+  enabled: false
+  path: "~/todo.md"
+
+# ---- M6: macros (declared inline; no shell, argv form) ----
+macros:
+  enabled: false
+  timeout_sec: 10.0
+  definitions: []
+  # Example:
+  # definitions:
+  #   - id: start_work
+  #     label: "Start work"
+  #     icon: "🚀"
+  #     commands:
+  #       - ["xdg-open", "https://wfirma.atlassian.net"]
+  #       - ["code", "/home/me/work"]
+
+# ---- M6: standup brief (on-demand) ----
+standup:
+  enabled: false
+  repos: []
+  git_author_email: ""             # leave empty to fall back to secrets.jira.email
+
+# ---- M6: reminders (water/eyes outside of pomodoro) ----
+reminders:
+  enabled: false
+  interval_sec: 1500               # 25 min — alternates water / eyes

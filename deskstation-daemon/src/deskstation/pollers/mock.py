@@ -293,12 +293,12 @@ def start_all_mocks(
     *,
     skip: set[str] | None = None,
 ) -> list[asyncio.Task[None]]:
-    """Instantiate one poller per screen and start each as an asyncio Task.
+    """Start all mock pollers. Returns the list of tasks.
 
-    `skip` is an optional set of screen keys to omit (valid keys:
-    ``"top_bar"``, ``"screen_1"``, ``"screen_2"``, ``"screen_3"``,
-    ``"screen_4"``). Unknown keys are silently ignored. When ``skip`` is
-    ``None`` all five mock pollers are started — the default M2-era behaviour.
+    ``skip`` is an optional set of screen keys to omit. Valid keys: ``"top_bar"``,
+    ``"screen_1"``, ``"screen_2"``, ``"screen_3"``, ``"screen_4"``. Unknown
+    keys are silently ignored. When ``skip`` is None or empty, all pollers
+    run.
 
     Returns the list of Task handles for cancellation on shutdown.
     """

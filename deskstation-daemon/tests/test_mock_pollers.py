@@ -397,3 +397,34 @@ async def test_start_all_mocks_produces_messages(n_ticks: int) -> None:
 
     # At least one message from each of the 5 pollers should be present
     assert bridge._outbound.qsize() >= 5
+
+
+async def test_start_all_mocks_skips_top_bar() -> None:
+    """skip={"top_bar"} must yield no TopBarMsg on the bridge."""
+    ui, bridge = _make_ui()
+    tasks = start_all_mocks(ui, interval_sec=0.05, skip={"top_bar"})
+    assert len(tasks) == 4
+    await asyncio.sleep(0.2)
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Drain everything and confirm no TopBarMsg slipped through.
+    while not bridge._outbound.empty():
+        msg = await bridge.received()
+        assert not isinstance(msg, TopBarMsg)
+
+
+async def test_start_all_mocks_skips_screen_4() -> None:
+    """skip={"screen_4"} must yield no Screen4Msg on the bridge."""
+    ui, bridge = _make_ui()
+    tasks = start_all_mocks(ui, interval_sec=0.05, skip={"screen_4"})
+    assert len(tasks) == 4
+    await asyncio.sleep(0.2)
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    while not bridge._outbound.empty():
+        msg = await bridge.received()
+        assert not isinstance(msg, Screen4Msg)

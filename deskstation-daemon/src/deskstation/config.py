@@ -87,6 +87,55 @@ class DbusListenerConfig(BaseModel):
     buffer_size: int = 32
 
 
+class WeatherConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    latitude: float = 52.2297
+    longitude: float = 21.0122
+    poll_interval_sec: float = 15 * 60
+
+
+class ClaudeUsageConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    command: list[str] = Field(default_factory=lambda: ["ccusage", "--json"])
+    poll_interval_sec: float = 5 * 60
+
+
+class TodoWatcherConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    path: Path = Field(default=Path("~/todo.md"))
+
+
+class MacroDef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    label: str
+    icon: str = ""
+    commands: list[list[str]] = Field(default_factory=list)
+
+
+class MacroConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    timeout_sec: float = 10.0
+    definitions: list[MacroDef] = Field(default_factory=list)
+
+
+class StandupConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    repos: list[Path] = Field(default_factory=list)
+    git_author_email: str = ""
+
+
+class RemindersConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    interval_sec: float = 25 * 60
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
@@ -100,6 +149,12 @@ class Config(BaseModel):
     gchat: GoogleChatPollerConfig = Field(default_factory=GoogleChatPollerConfig)
     calendar: CalendarPollerConfig = Field(default_factory=CalendarPollerConfig)
     dbus: DbusListenerConfig = Field(default_factory=DbusListenerConfig)
+    weather: WeatherConfig = Field(default_factory=WeatherConfig)
+    claude_usage: ClaudeUsageConfig = Field(default_factory=ClaudeUsageConfig)
+    todo: TodoWatcherConfig = Field(default_factory=TodoWatcherConfig)
+    macros: MacroConfig = Field(default_factory=MacroConfig)
+    standup: StandupConfig = Field(default_factory=StandupConfig)
+    reminders: RemindersConfig = Field(default_factory=RemindersConfig)
 
 
 def load_config(path: Path | None = None) -> Config:
