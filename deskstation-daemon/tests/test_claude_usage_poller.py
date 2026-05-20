@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from deskstation.pollers.claude_usage import ClaudeUsagePoller, format_usage
 
 
@@ -11,7 +9,7 @@ def test_format_usage_percent() -> None:
     assert format_usage(99.9) == "100%"
 
 
-async def test_poller_patches_when_subprocess_returns_json(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_poller_patches_when_subprocess_returns_json() -> None:
     pushed: list[str] = []
 
     class FakeUI:
@@ -22,17 +20,17 @@ async def test_poller_patches_when_subprocess_returns_json(monkeypatch: pytest.M
         assert argv == ["ccusage", "--json"]
         return 0, json.dumps({"percent_today": 47.0}).encode(), b""
 
-    monkeypatch.setattr(
-        "deskstation.pollers.claude_usage._run_argv",
-        fake_run_argv,
+    poller = ClaudeUsagePoller(
+        FakeUI(),  # type: ignore[arg-type]
+        command=["ccusage", "--json"],
+        run_argv=fake_run_argv,
     )
-    poller = ClaudeUsagePoller(FakeUI(), command=["ccusage", "--json"])  # type: ignore[arg-type]
     await poller.tick()
     assert pushed == ["47%"]
     assert not poller.disabled
 
 
-async def test_poller_disables_on_missing_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_poller_disables_on_missing_binary() -> None:
     pushed: list[str] = []
 
     class FakeUI:
@@ -42,11 +40,11 @@ async def test_poller_disables_on_missing_binary(monkeypatch: pytest.MonkeyPatch
     async def fake_run_argv(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         raise FileNotFoundError("ccusage")
 
-    monkeypatch.setattr(
-        "deskstation.pollers.claude_usage._run_argv",
-        fake_run_argv,
+    poller = ClaudeUsagePoller(
+        FakeUI(),  # type: ignore[arg-type]
+        command=["ccusage", "--json"],
+        run_argv=fake_run_argv,
     )
-    poller = ClaudeUsagePoller(FakeUI(), command=["ccusage", "--json"])  # type: ignore[arg-type]
     await poller.tick()
     assert pushed == []
     assert poller.disabled

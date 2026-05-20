@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import structlog
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
     from deskstation.ui_state import UIState
 
 log = structlog.get_logger(__name__)
+
+RunArgvFn = Callable[[list[str], float], Awaitable[tuple[int, bytes, bytes]]]
 
 _PERCENT_KEYS = ("percent_today", "percent", "usage_pct")
 
@@ -66,18 +69,20 @@ class ClaudeUsagePoller:
         command: list[str],
         interval_sec: float = 5 * 60,
         timeout_sec: float = 10.0,
+        run_argv: RunArgvFn | None = None,
     ) -> None:
         self._ui = ui_state
         self._cmd = command
         self.interval_sec = interval_sec
         self._timeout = timeout_sec
+        self._run_argv: RunArgvFn = run_argv or _run_argv
         self.disabled = False
 
     async def tick(self) -> None:
         if self.disabled:
             return
         try:
-            rc, stdout, stderr = await _run_argv(self._cmd, timeout=self._timeout)
+            rc, stdout, stderr = await self._run_argv(self._cmd, self._timeout)
         except FileNotFoundError:
             log.warning("claude_usage_binary_missing", command=self._cmd[0])
             self.disabled = True
@@ -90,12 +95,15 @@ class ClaudeUsagePoller:
                 "claude_usage_nonzero_exit",
                 command=self._cmd,
                 rc=rc,
-                stderr=stderr[:200],
+                stderr=stderr[:200].decode("utf-8", errors="replace"),
             )
             return
         pct = _parse_percent(stdout)
         if pct is None:
-            log.warning("claude_usage_parse_failed", stdout=stdout[:200])
+            log.warning(
+                "claude_usage_parse_failed",
+                stdout=stdout[:200].decode("utf-8", errors="replace"),
+            )
             return
         self._ui.set_claude_usage(format_usage(pct))
 
