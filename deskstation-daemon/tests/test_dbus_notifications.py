@@ -50,6 +50,13 @@ def test_classify_source_messenger() -> None:
     assert listener._classify_source("Facebook") == "messenger"
 
 
+def test_classify_source_chat() -> None:
+    listener = DbusNotificationListener()
+    assert listener._classify_source("Google Chat") == "chat"
+    assert listener._classify_source("chat.google.com") == "chat"
+    assert listener._classify_source("Hangouts") == "chat"
+
+
 def test_classify_source_unknown() -> None:
     listener = DbusNotificationListener()
     assert listener._classify_source("Slack") == "system"

@@ -156,11 +156,15 @@ class DbusNotificationListener:
         lower = app_name.lower()
         return any(fnmatch.fnmatch(lower, p.lower()) for p in self._patterns)
 
-    def _classify_source(self, app_name: str) -> Literal["whatsapp", "messenger", "system"]:
+    def _classify_source(self, app_name: str) -> Literal["whatsapp", "messenger", "chat", "system"]:
         """Public for testability."""
         lower = app_name.lower()
         if "whatsapp" in lower:
             return "whatsapp"
         if "messenger" in lower or "facebook" in lower:
             return "messenger"
+        # Google Chat PWA / hangouts. Catches "Google Chat", "chat.google.com",
+        # and the legacy "hangouts*" naming.
+        if "chat.google.com" in lower or "google chat" in lower or "hangouts" in lower:
+            return "chat"
         return "system"
