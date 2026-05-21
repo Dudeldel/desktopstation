@@ -80,11 +80,15 @@ def _parse_created_age_hours(created_on: str, now: datetime) -> float:
 def _parse_pr_item(item: dict[str, Any], kind: Literal["mine", "review"], now: datetime) -> Pr:
     participants = item.get("participants") or []
     approvals = sum(1 for p in participants if p.get("approved"))
+    # Modern Atlassian accounts have no `nickname`; fall back to `display_name`,
+    # then to an empty string for ghost/deleted authors.
+    author = item.get("author") or {}
+    author_label = author.get("nickname") or author.get("display_name") or ""
     return Pr(
         id=str(item["id"]),
         title=item["title"],
         repo=item["destination"]["repository"]["name"],
-        author_username=item["author"]["nickname"],
+        author_username=author_label,
         source_branch=item["source"]["branch"]["name"],
         dest_branch=item["destination"]["branch"]["name"],
         age_hours=_parse_created_age_hours(item["created_on"], now),
