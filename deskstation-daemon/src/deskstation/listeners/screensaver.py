@@ -1,15 +1,21 @@
-"""Listens to org.freedesktop.ScreenSaver.ActiveChanged on the session bus.
+"""Listens to ScreenSaver ActiveChanged signals on the session bus.
 
-Active=True → host is locked; Active=False → host is unlocked. The session
-bus may also expose org.gnome.ScreenSaver or org.kde.ScreenSaver with the same
-interface; we match on the well-known org.freedesktop.ScreenSaver path which
-all major DEs expose.
+Active=True → host is locked; Active=False → host is unlocked. Different DEs
+emit the signal on different interfaces — we accept all of the common ones.
+Observed in the wild on Ubuntu/GNOME 46 (Wayland): the signal arrives on
+``org.gnome.ScreenSaver``, NOT on ``org.freedesktop.ScreenSaver``, even though
+the GNOME ScreensaverProxy carries the freedesktop method names.
 
-The listener is signal-driven: it adds a dbus match rule and installs a
-message handler on the bus. Each ``ActiveChanged(b)`` signal received is
-turned into a coroutine call on the daemon's main event loop (the bus
-handler may run on a different thread / context depending on dbus_next's
-internals, so we hop loops via ``asyncio.run_coroutine_threadsafe``).
+The listener is signal-driven: it adds one dbus match rule per accepted
+interface and installs a single message handler. Each ``ActiveChanged(b)``
+signal received is turned into a coroutine call on the daemon's main event
+loop (the bus handler may run on a different thread / context depending on
+dbus_next's internals, so we hop loops via ``asyncio.run_coroutine_threadsafe``).
+
+GNOME may emit the same signal twice in quick succession (gnome-shell +
+gnome-settings-daemon both relay it). That's fine: the host's UI-state
+model is idempotent, so receiving two identical ``lock_state`` snapshots
+just pushes the same payload twice.
 """
 
 from __future__ import annotations
@@ -25,6 +31,13 @@ log = structlog.get_logger(__name__)
 
 OnLockChange = Callable[[bool], Awaitable[None] | None]
 
+ACCEPTED_INTERFACES: tuple[str, ...] = (
+    "org.freedesktop.ScreenSaver",
+    "org.gnome.ScreenSaver",
+    "org.kde.ScreenSaver",
+    "org.cinnamon.ScreenSaver",
+)
+
 
 def classify_signal(msg: Message) -> bool | None:
     """Return the lock-state bool if ``msg`` is an ActiveChanged signal, else None.
@@ -34,7 +47,7 @@ def classify_signal(msg: Message) -> bool | None:
     """
     if msg.message_type != MessageType.SIGNAL:
         return None
-    if msg.interface != "org.freedesktop.ScreenSaver":
+    if msg.interface not in ACCEPTED_INTERFACES:
         return None
     if msg.member != "ActiveChanged":
         return None
@@ -54,21 +67,21 @@ class ScreensaverListener:
 
     async def start(self) -> None:
         bus = await MessageBus(bus_type=BusType.SESSION).connect()
-        # Add a match rule for the ActiveChanged signal. We do not narrow
-        # by sender — KDE / GNOME / cinnamon all emit on different bus
-        # names but on the same interface.
-        await bus.call(
-            Message(
-                destination="org.freedesktop.DBus",
-                path="/org/freedesktop/DBus",
-                interface="org.freedesktop.DBus",
-                member="AddMatch",
-                signature="s",
-                body=[
-                    "type='signal',interface='org.freedesktop.ScreenSaver',member='ActiveChanged'"
-                ],
+        # Add one match rule per accepted interface. Different DEs use
+        # different interface names — see ACCEPTED_INTERFACES.
+        for interface in ACCEPTED_INTERFACES:
+            await bus.call(
+                Message(
+                    destination="org.freedesktop.DBus",
+                    path="/org/freedesktop/DBus",
+                    interface="org.freedesktop.DBus",
+                    member="AddMatch",
+                    signature="s",
+                    body=[
+                        f"type='signal',interface='{interface}',member='ActiveChanged'"
+                    ],
+                )
             )
-        )
         # Capture the loop BEFORE registering the handler so a signal that
         # arrives in the same tick as start() can't race the loop assignment.
         self._bus = bus

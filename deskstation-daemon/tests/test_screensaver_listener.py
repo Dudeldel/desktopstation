@@ -10,9 +10,14 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 from dbus_next import MessageType  # type: ignore[attr-defined]
 
-from deskstation.listeners.screensaver import ScreensaverListener, classify_signal
+from deskstation.listeners.screensaver import (
+    ACCEPTED_INTERFACES,
+    ScreensaverListener,
+    classify_signal,
+)
 
 
 def _fake_msg(
@@ -44,6 +49,15 @@ def test_classify_signal_ignores_non_signal() -> None:
 
 def test_classify_signal_ignores_wrong_interface() -> None:
     assert classify_signal(_fake_msg(interface="org.freedesktop.Notifications")) is None
+
+
+@pytest.mark.parametrize("interface", ACCEPTED_INTERFACES)
+def test_classify_signal_accepts_each_de_interface(interface: str) -> None:
+    # Every accepted DE interface must classify true/false correctly. The
+    # GNOME case in particular regressed against a real Ubuntu Wayland
+    # session that emits on org.gnome.ScreenSaver, not the freedesktop name.
+    assert classify_signal(_fake_msg(interface=interface, body=[True])) is True
+    assert classify_signal(_fake_msg(interface=interface, body=[False])) is False
 
 
 def test_classify_signal_ignores_wrong_member() -> None:
