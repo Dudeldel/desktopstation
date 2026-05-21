@@ -209,3 +209,57 @@ skip this — use the minimal config in step 3 above.
 
 What you **should not** skip: section 3 (lock end-to-end) and especially
 edge cases 6–8. Those are the only verification we don't have yet.
+
+## Postscript — what actually happened on 2026-05-21
+
+Verification ran on a fresh Ubuntu / GNOME 46 (Wayland) machine. Outcomes:
+
+| Step | Outcome |
+|---|---|
+| 1. Firmware build | Clean. `lock_overlay_show/hide/visible` + `pomodoro_overlay_visible` symbols present in `deskstation.elf`. |
+| 2. Flash + smoke test | Required the BOOT+RESET dance (TinyUSB OTG has no auto-bootloader hook unlike USB-Serial-JTAG). After flash: carousel + autoscroll + top bar all render; heartbeats flow. |
+| 3. Lock end-to-end | Failed first, then **passed** after a daemon-side fix. See below. |
+| 6 / 7 / 8 (edge cases) | Not exercised this session. |
+
+### Bug found + fixed during verification
+
+The screensaver listener match rule was hard-coded to
+`interface='org.freedesktop.ScreenSaver'`. On Ubuntu / GNOME 46 Wayland,
+GNOME emits `ActiveChanged` only on `org.gnome.ScreenSaver` — the
+freedesktop-named proxy does NOT relay it. Result: pre-fix, the entire
+lock feature was a silent no-op on this DE (`screensaver_listener_active`
+logged at startup, but nothing ever after). Fix in commit `118563d` —
+subscribes to all four common DE-namespaced interfaces.
+
+After the fix, `dbus-send org.gnome.ScreenSaver.Lock` reliably produced
+two `ui_state_sent screen=lock_state` events on lock and two more on
+unlock (GNOME's dual emit from gnome-shell + gnome-settings-daemon —
+harmless because identical idempotent payloads). User confirmed the
+opaque overlay with X icon + "EKRAN ZABLOKOWANY" rendered correctly on
+the panel.
+
+### New follow-ups discovered (not blocking)
+
+- **Touch under the overlay is not fully swallowed.** With the lock
+  overlay visible, swiping the panel still produces `screen_changed`
+  events on the daemon (the carousel underneath is reacting). It's
+  cosmetically hidden by the opaque overlay, but `task_clicked` /
+  `meeting_join` events would presumably also fire on a tap hitting an
+  active widget. The handoff promised "no `screen_changed`, `task_clicked`,
+  etc. events should reach the daemon" — that's only true for the
+  overlay's *own* hit area today. Fix candidate: make `lock_overlay`
+  intercept input on `lv_layer_top` with an event filter that returns
+  `LV_RES_OK` (consume) for all events, not just visually cover.
+- **Carousel autoscroll continues while locked.** Independent of touch,
+  the firmware's autoscroll timer keeps firing and pushing
+  `screen_changed via=autoscroll` to the daemon during the lock window.
+  Edge case 7 only gates autoscroll resume *after unlock with pomodoro
+  active*; it does not gate autoscroll *during* the lock. Low impact
+  (events are noise the daemon ignores), but worth pausing the timer
+  while the overlay is up.
+- **`/home/pc30` path in `daemon-config.yaml`.** The transfer bundle's
+  `claude_usage.command` still hard-codes `/home/pc30` in the absolute
+  path; needed a manual edit to `/home/jdud` on the new machine.
+  Follow-up: read `$HOME` at daemon startup instead of baking it into
+  config, OR document that the bundle's claude_usage line always needs
+  editing.
