@@ -69,9 +69,11 @@ class ScreensaverListener:
                 ],
             )
         )
-        bus.add_message_handler(self._on_message)
+        # Capture the loop BEFORE registering the handler so a signal that
+        # arrives in the same tick as start() can't race the loop assignment.
         self._bus = bus
         self._loop = asyncio.get_running_loop()
+        bus.add_message_handler(self._on_message)
         log.info("screensaver_listener_active")
 
     async def stop(self) -> None:

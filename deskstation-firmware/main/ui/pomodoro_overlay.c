@@ -147,6 +147,11 @@ static void build_overlay(void)
     make_action_btn(row, "ANULUJ",    theme_danger(), cancel_clicked_cb, NULL);
 }
 
+bool pomodoro_overlay_visible(void)
+{
+    return s_root != NULL && !lv_obj_has_flag(s_root, LV_OBJ_FLAG_HIDDEN);
+}
+
 void pomodoro_overlay_update(const pomodoro_state_payload_t *data)
 {
     if (!data) return;

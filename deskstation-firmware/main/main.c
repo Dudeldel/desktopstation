@@ -122,7 +122,13 @@ static void ui_dispatch_task(void *arg)
                     carousel_autoscroll_pause();
                 } else {
                     lock_overlay_hide();
-                    carousel_autoscroll_resume();
+                    // Only resume autoscroll if nothing else is keeping it
+                    // paused. A pomodoro that was active when we locked is
+                    // still active when we unlock, and the break overlay
+                    // can survive the lock-→-unlock cycle too.
+                    if (!fullscreen_overlay_visible() && !pomodoro_overlay_visible()) {
+                        carousel_autoscroll_resume();
+                    }
                 }
                 break;
             case MSG_HELLO:
@@ -131,6 +137,14 @@ static void ui_dispatch_task(void *arg)
             default:
                 ESP_LOGW(TAG, "ignored type=%d", msg.type);
                 break;
+        }
+
+        // Security guard: if the host is locked, the lock overlay must stay
+        // on top no matter what. Pomodoro and fullscreen overlays both call
+        // lv_obj_move_foreground on themselves when they re-render, which
+        // would otherwise pop them above the lock screen within ~1s.
+        if (lock_overlay_visible()) {
+            lock_overlay_show();
         }
     }
 }
