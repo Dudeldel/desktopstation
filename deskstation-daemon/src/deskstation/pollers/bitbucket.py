@@ -71,8 +71,8 @@ class BitbucketPoller(MockPoller):
             return
 
         try:
-            my_prs = await self._client.list_my_open_prs(self._username)
-            review_prs = await self._client.list_review_prs(self._username, self._repos)
+            my_prs = await self._client.list_my_open_prs(self._repos)
+            review_prs = await self._client.list_review_prs(self._repos)
         except BitbucketAuthError:
             self.auth_failed = True
             log.error("bitbucket_poller_auth_failed")

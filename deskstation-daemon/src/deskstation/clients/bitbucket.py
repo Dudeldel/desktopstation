@@ -139,57 +139,126 @@ class BitbucketClient:
         else:
             self._http = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
             self._owns_http = True
+        self._account_uuid: str | None = None
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
 
-    async def list_my_open_prs(self, username: str) -> list[Pr]:
-        url = f"{self._base_url}/2.0/pullrequests/{username}"
-        params: dict[str, Any] = {"state": "OPEN", "pagelen": 50}
-        cache_key = f"bitbucket:my_prs:{username}"
+    async def _ensure_account_uuid(self) -> str:
+        """Discover the authenticated user's account UUID via /2.0/user.
 
+        Cached on the instance after the first successful call. The legacy
+        /2.0/pullrequests/{selected_user} endpoint is deprecated for Atlassian
+        accounts without a nickname; the modern path is workspace-scoped queries
+        filtered by author.uuid / reviewers.uuid, which need the UUID.
+        """
+        if self._account_uuid is not None:
+            return self._account_uuid
         try:
-            response = await self._http.get(url, params=params, auth=self._auth)
-            response.raise_for_status()
+            resp = await self._http.get(f"{self._base_url}/2.0/user", auth=self._auth)
+            resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             if status in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
-                log.warning("bitbucket_request_failed", endpoint="list_my_open_prs", status=status)
-                raise BitbucketAuthError(f"Bitbucket auth failed: {status}") from exc
-            if status >= 500:
-                return self._my_prs_cache_fallback(cache_key, exc)
-            log.warning("bitbucket_request_failed", endpoint="list_my_open_prs", status=status)
-            raise BitbucketTransientError(f"Bitbucket list_my_open_prs failed: {status}") from exc
+                raise BitbucketAuthError(f"Bitbucket /2.0/user auth failed: {status}") from exc
+            raise BitbucketTransientError(f"Bitbucket /2.0/user failed: {status}") from exc
         except httpx.HTTPError as exc:
-            return self._my_prs_cache_fallback(cache_key, exc)
+            raise BitbucketTransientError(f"Bitbucket /2.0/user transient error: {exc}") from exc
+        data = resp.json()
+        uuid = data.get("uuid")
+        if not isinstance(uuid, str) or not uuid:
+            raise BitbucketTransientError("Bitbucket /2.0/user response missing 'uuid' field")
+        self._account_uuid = uuid
+        log.info("bitbucket_account_uuid_discovered", uuid=uuid)
+        return uuid
 
-        self._cache.put(cache_key, response.content)
-        log.debug("bitbucket_request", endpoint="list_my_open_prs", status=response.status_code)
-        return _parse_prs(response.content, kind="mine")
+    async def list_my_open_prs(self, repos: list[str]) -> list[Pr]:
+        """Open PRs authored by the authenticated user across the given repos.
 
-    def _my_prs_cache_fallback(self, cache_key: str, exc: Exception) -> list[Pr]:
+        Iterates workspace-scoped /2.0/repositories/{ws}/{repo}/pullrequests with
+        a `state="OPEN" AND author.uuid="{...}"` filter. Per-repo cache fallback:
+        a single repo with a transient error doesn't blank the rest.
+        """
+        uuid = await self._ensure_account_uuid()
+        results: list[Pr] = []
+        for repo in repos:
+            q = f'state="OPEN" AND author.uuid="{uuid}"'
+            url = f"{self._base_url}/2.0/repositories/{self._workspace}/{repo}/pullrequests"
+            params: dict[str, Any] = {"q": q, "pagelen": 50}
+            cache_key = f"bitbucket:my_prs:{self._workspace}:{repo}:{uuid}"
+            try:
+                response = await self._http.get(url, params=params, auth=self._auth)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
+                    log.warning(
+                        "bitbucket_request_failed",
+                        endpoint="list_my_open_prs",
+                        repo=repo,
+                        status=status,
+                    )
+                    raise BitbucketAuthError(f"Bitbucket auth failed: {status}") from exc
+                if status >= 500:
+                    cached = self._my_prs_cache_fallback(cache_key, repo, exc)
+                    if cached is not None:
+                        results.extend(cached)
+                    continue
+                log.warning(
+                    "bitbucket_request_failed",
+                    endpoint="list_my_open_prs",
+                    repo=repo,
+                    status=status,
+                )
+                continue
+            except httpx.HTTPError as exc:
+                cached = self._my_prs_cache_fallback(cache_key, repo, exc)
+                if cached is not None:
+                    results.extend(cached)
+                continue
+            self._cache.put(cache_key, response.content)
+            log.debug(
+                "bitbucket_request",
+                endpoint="list_my_open_prs",
+                repo=repo,
+                status=response.status_code,
+            )
+            results.extend(_parse_prs(response.content, kind="mine"))
+        return results
+
+    def _my_prs_cache_fallback(
+        self,
+        cache_key: str,
+        repo: str,
+        exc: Exception,
+    ) -> list[Pr] | None:
         entry = self._cache.get(cache_key)
         if entry is None:
-            log.warning("bitbucket_request_failed", endpoint="list_my_open_prs", error=str(exc))
-            raise BitbucketTransientError(
-                "Bitbucket list_my_open_prs failed and no cache available"
-            ) from exc
+            log.warning(
+                "bitbucket_request_failed_skipping_repo",
+                endpoint="list_my_open_prs",
+                repo=repo,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return None
         payload, fetched_at = entry
         log.info(
             "bitbucket_request_cache_hit",
             endpoint="list_my_open_prs",
+            repo=repo,
             fetched_at=fetched_at.isoformat(),
         )
         return _parse_prs(payload, kind="mine")
 
     async def list_my_merged_prs_since(
         self,
-        username: str,
         since: datetime,
         repos: list[str],
     ) -> list[Pr]:
-        """Merged PRs authored by ``username`` whose updated_on >= since.
+        """Merged PRs authored by the authenticated user, updated since `since`,
+        across the given repos.
 
         Bitbucket has no global "PRs by author" endpoint that includes the
         MERGED state across all repos, so this iterates the configured repos.
@@ -198,10 +267,11 @@ class BitbucketClient:
         blank a multi-repo standup. No cache fallback — a stale standup brief
         is worse than an empty one.
         """
+        uuid = await self._ensure_account_uuid()
         results: list[Pr] = []
         since_iso = since.isoformat()
         for repo in repos:
-            q = f'state="MERGED" AND author.username="{username}" AND updated_on >= "{since_iso}"'
+            q = f'state="MERGED" AND author.uuid="{uuid}" AND updated_on >= "{since_iso}"'
             url = f"{self._base_url}/2.0/repositories/{self._workspace}/{repo}/pullrequests"
             params: dict[str, Any] = {"q": q, "pagelen": 20}
             try:
@@ -232,13 +302,14 @@ class BitbucketClient:
             results.extend(_parse_prs(resp.content, kind="mine"))
         return results
 
-    async def list_review_prs(self, username: str, repos: list[str]) -> list[Pr]:
+    async def list_review_prs(self, repos: list[str]) -> list[Pr]:
+        uuid = await self._ensure_account_uuid()
         results: list[Pr] = []
         for repo in repos:
             url = f"{self._base_url}/2.0/repositories/{self._workspace}/{repo}/pullrequests"
-            q_value = f'reviewers.username="{username}" AND state="OPEN"'
+            q_value = f'reviewers.uuid="{uuid}" AND state="OPEN"'
             params: dict[str, Any] = {"q": q_value, "pagelen": 50}
-            cache_key = f"bitbucket:review_prs:{self._workspace}:{username}:{repo}"
+            cache_key = f"bitbucket:review_prs:{self._workspace}:{repo}:{uuid}"
 
             try:
                 response = await self._http.get(url, params=params, auth=self._auth)

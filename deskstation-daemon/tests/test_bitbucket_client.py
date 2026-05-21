@@ -14,16 +14,21 @@ import respx
 from deskstation.clients.bitbucket import (
     BitbucketAuthError,
     BitbucketClient,
-    BitbucketTransientError,
     PipelineRun,
 )
 from deskstation.store.api_cache import ApiCache
 
 BASE_URL = "https://api.bitbucket.org"
 WORKSPACE = "acme"
-USERNAME = "alice"
 EMAIL = "alice@example.com"
 TOKEN = "secret-token"
+ACCOUNT_UUID = "{abc-def-1234}"
+
+
+def _mock_user_endpoint(router: respx.MockRouter) -> None:
+    router.get("/2.0/user").mock(
+        return_value=httpx.Response(200, json={"uuid": ACCOUNT_UUID}),
+    )
 
 
 def _make_pr_payload(
@@ -64,7 +69,7 @@ def _make_client(tmp_path: Path) -> tuple[BitbucketClient, ApiCache]:
 
 async def test_list_my_open_prs_success(tmp_path: Path) -> None:
     client, _ = _make_client(tmp_path)
-    payload = {
+    payload_a = {
         "values": [
             _make_pr_payload(
                 pr_id=42,
@@ -73,6 +78,10 @@ async def test_list_my_open_prs_success(tmp_path: Path) -> None:
                 source="feature/auth",
                 dest="main",
             ),
+        ]
+    }
+    payload_b = {
+        "values": [
             _make_pr_payload(
                 pr_id=43,
                 title="Add metrics",
@@ -84,10 +93,14 @@ async def test_list_my_open_prs_success(tmp_path: Path) -> None:
     }
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(
-                return_value=httpx.Response(200, json=payload)
+            _mock_user_endpoint(router)
+            route_a = router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
+                return_value=httpx.Response(200, json=payload_a)
             )
-            prs = await client.list_my_open_prs(USERNAME)
+            router.get(f"/2.0/repositories/{WORKSPACE}/frontend/pullrequests").mock(
+                return_value=httpx.Response(200, json=payload_b)
+            )
+            prs = await client.list_my_open_prs(["backend", "frontend"])
 
         assert len(prs) == 2
         assert prs[0].id == "42"
@@ -103,6 +116,10 @@ async def test_list_my_open_prs_success(tmp_path: Path) -> None:
         assert prs[1].source_branch == "feature/metrics"
         assert prs[1].dest_branch == "develop"
         assert prs[1].kind == "mine"
+        # Filter uses author.uuid with the discovered UUID.
+        q = route_a.calls.last.request.url.params["q"]
+        assert f'author.uuid="{ACCOUNT_UUID}"' in q
+        assert 'state="OPEN"' in q
     finally:
         await client.aclose()
 
@@ -113,10 +130,11 @@ async def test_list_my_open_prs_age_hours(tmp_path: Path) -> None:
     payload = {"values": [_make_pr_payload(created_on=created)]}
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(
+            _mock_user_endpoint(router)
+            router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
                 return_value=httpx.Response(200, json=payload)
             )
-            prs = await client.list_my_open_prs(USERNAME)
+            prs = await client.list_my_open_prs(["backend"])
 
         assert len(prs) == 1
         # Within tolerance — call may take a few ms.
@@ -139,10 +157,11 @@ async def test_list_my_open_prs_approvals_counted(tmp_path: Path) -> None:
     }
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(
+            _mock_user_endpoint(router)
+            router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
                 return_value=httpx.Response(200, json=payload)
             )
-            prs = await client.list_my_open_prs(USERNAME)
+            prs = await client.list_my_open_prs(["backend"])
 
         assert len(prs) == 1
         assert prs[0].approvals == 1
@@ -155,12 +174,13 @@ async def test_list_my_open_prs_caches_response(tmp_path: Path) -> None:
     payload = {"values": [_make_pr_payload()]}
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(
+            _mock_user_endpoint(router)
+            router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
                 return_value=httpx.Response(200, json=payload)
             )
-            await client.list_my_open_prs(USERNAME)
+            await client.list_my_open_prs(["backend"])
 
-        entry = cache.get(f"bitbucket:my_prs:{USERNAME}")
+        entry = cache.get(f"bitbucket:my_prs:{WORKSPACE}:backend:{ACCOUNT_UUID}")
         assert entry is not None
         cached_payload, _ = entry
         assert json.loads(cached_payload) == payload
@@ -173,33 +193,42 @@ async def test_list_my_open_prs_500_falls_back_to_cache(tmp_path: Path) -> None:
     payload = {
         "values": [
             _make_pr_payload(pr_id=42, title="Cached PR", repo="backend"),
-            _make_pr_payload(pr_id=43, title="Another", repo="frontend"),
         ]
     }
-    cache.put(f"bitbucket:my_prs:{USERNAME}", json.dumps(payload).encode())
+    cache.put(
+        f"bitbucket:my_prs:{WORKSPACE}:backend:{ACCOUNT_UUID}",
+        json.dumps(payload).encode(),
+    )
 
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(return_value=httpx.Response(500))
-            prs = await client.list_my_open_prs(USERNAME)
+            _mock_user_endpoint(router)
+            router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
+                return_value=httpx.Response(500)
+            )
+            prs = await client.list_my_open_prs(["backend"])
 
-        # Equality on the fields that don't depend on `now`.
-        assert len(prs) == 2
-        assert [p.id for p in prs] == ["42", "43"]
-        assert [p.title for p in prs] == ["Cached PR", "Another"]
-        assert [p.repo for p in prs] == ["backend", "frontend"]
-        assert all(p.kind == "mine" for p in prs)
+        assert len(prs) == 1
+        assert prs[0].id == "42"
+        assert prs[0].title == "Cached PR"
+        assert prs[0].repo == "backend"
+        assert prs[0].kind == "mine"
     finally:
         await client.aclose()
 
 
-async def test_list_my_open_prs_500_no_cache_raises(tmp_path: Path) -> None:
+async def test_list_my_open_prs_500_no_cache_skips_repo(tmp_path: Path) -> None:
+    """With per-repo cache fallback, a 500 on the only repo with no cache
+    returns an empty list rather than raising — per-repo errors are non-fatal."""
     client, _ = _make_client(tmp_path)
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(return_value=httpx.Response(500))
-            with pytest.raises(BitbucketTransientError):
-                await client.list_my_open_prs(USERNAME)
+            _mock_user_endpoint(router)
+            router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
+                return_value=httpx.Response(500)
+            )
+            prs = await client.list_my_open_prs(["backend"])
+        assert prs == []
     finally:
         await client.aclose()
 
@@ -207,12 +236,29 @@ async def test_list_my_open_prs_500_no_cache_raises(tmp_path: Path) -> None:
 async def test_list_my_open_prs_401_raises_auth(tmp_path: Path) -> None:
     client, cache = _make_client(tmp_path)
     payload = {"values": [_make_pr_payload()]}
-    cache.put(f"bitbucket:my_prs:{USERNAME}", json.dumps(payload).encode())
+    cache.put(
+        f"bitbucket:my_prs:{WORKSPACE}:backend:{ACCOUNT_UUID}",
+        json.dumps(payload).encode(),
+    )
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/pullrequests/{USERNAME}").mock(return_value=httpx.Response(401))
+            _mock_user_endpoint(router)
+            router.get(f"/2.0/repositories/{WORKSPACE}/backend/pullrequests").mock(
+                return_value=httpx.Response(401)
+            )
             with pytest.raises(BitbucketAuthError):
-                await client.list_my_open_prs(USERNAME)
+                await client.list_my_open_prs(["backend"])
+    finally:
+        await client.aclose()
+
+
+async def test_ensure_account_uuid_auth_failure_raises(tmp_path: Path) -> None:
+    client, _ = _make_client(tmp_path)
+    try:
+        with respx.mock(base_url=BASE_URL) as router:
+            router.get("/2.0/user").mock(return_value=httpx.Response(401))
+            with pytest.raises(BitbucketAuthError):
+                await client.list_my_open_prs(["backend"])
     finally:
         await client.aclose()
 
@@ -223,19 +269,24 @@ async def test_list_review_prs_aggregates_across_repos(tmp_path: Path) -> None:
     payload_b = {"values": [_make_pr_payload(pr_id=20, title="B", repo="repo-b")]}
     try:
         with respx.mock(base_url=BASE_URL) as router:
-            router.get(f"/2.0/repositories/{WORKSPACE}/repo-a/pullrequests").mock(
+            _mock_user_endpoint(router)
+            route_a = router.get(f"/2.0/repositories/{WORKSPACE}/repo-a/pullrequests").mock(
                 return_value=httpx.Response(200, json=payload_a)
             )
             router.get(f"/2.0/repositories/{WORKSPACE}/repo-b/pullrequests").mock(
                 return_value=httpx.Response(200, json=payload_b)
             )
-            prs = await client.list_review_prs(USERNAME, ["repo-a", "repo-b"])
+            prs = await client.list_review_prs(["repo-a", "repo-b"])
 
         assert len(prs) == 2
         assert [p.id for p in prs] == ["10", "20"]
         assert [p.title for p in prs] == ["A", "B"]
         assert [p.repo for p in prs] == ["repo-a", "repo-b"]
         assert all(p.kind == "review" for p in prs)
+        # Filter uses reviewers.uuid with the discovered UUID.
+        q = route_a.calls.last.request.url.params["q"]
+        assert f'reviewers.uuid="{ACCOUNT_UUID}"' in q
+        assert 'state="OPEN"' in q
     finally:
         await client.aclose()
 
@@ -245,13 +296,14 @@ async def test_list_review_prs_partial_failure_skips_repo(tmp_path: Path) -> Non
     payload_a = {"values": [_make_pr_payload(pr_id=10, title="A", repo="repo-a")]}
     try:
         with respx.mock(base_url=BASE_URL) as router:
+            _mock_user_endpoint(router)
             router.get(f"/2.0/repositories/{WORKSPACE}/repo-a/pullrequests").mock(
                 return_value=httpx.Response(200, json=payload_a)
             )
             router.get(f"/2.0/repositories/{WORKSPACE}/repo-b/pullrequests").mock(
                 return_value=httpx.Response(500)
             )
-            prs = await client.list_review_prs(USERNAME, ["repo-a", "repo-b"])
+            prs = await client.list_review_prs(["repo-a", "repo-b"])
 
         assert len(prs) == 1
         assert prs[0].id == "10"

@@ -41,12 +41,12 @@ class _FakeBitbucketClient:
         self._pipelines: dict[str, list[PipelineRun | None | Exception]] = {
             k: list(v) for k, v in (pipelines or {}).items()
         }
-        self.my_prs_calls: list[str] = []
-        self.review_prs_calls: list[tuple[str, list[str]]] = []
+        self.my_prs_calls: list[list[str]] = []
+        self.review_prs_calls: list[list[str]] = []
         self.pipeline_calls: list[str] = []
 
-    async def list_my_open_prs(self, username: str) -> list[Pr]:
-        self.my_prs_calls.append(username)
+    async def list_my_open_prs(self, repos: list[str]) -> list[Pr]:
+        self.my_prs_calls.append(list(repos))
         if not self._my_prs:
             raise AssertionError("unexpected call to list_my_open_prs")
         nxt = self._my_prs.pop(0)
@@ -54,8 +54,8 @@ class _FakeBitbucketClient:
             raise nxt
         return nxt
 
-    async def list_review_prs(self, username: str, repos: list[str]) -> list[Pr]:
-        self.review_prs_calls.append((username, list(repos)))
+    async def list_review_prs(self, repos: list[str]) -> list[Pr]:
+        self.review_prs_calls.append(list(repos))
         if not self._review_prs:
             raise AssertionError("unexpected call to list_review_prs")
         nxt = self._review_prs.pop(0)

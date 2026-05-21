@@ -128,7 +128,6 @@ class StandupEngine:
             return []
         try:
             prs = await self._bb.list_my_merged_prs_since(
-                self._bb_user,
                 since,
                 [r.name for r in self._repos],
             )
