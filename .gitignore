@@ -8,6 +8,12 @@ deskstation-daemon/.mypy_cache/
 deskstation-daemon/.ruff_cache/
 deskstation-daemon/config.yaml
 deskstation-daemon/.env
+# Defensive: any secrets accidentally dropped in the daemon dir
+deskstation-daemon/setup.md
+deskstation-daemon/secrets.yaml
+deskstation-daemon/google_client.json
+deskstation-daemon/google_token.json
+deskstation-daemon/client_secret_*.json
 
 # Firmware (ESP-IDF)
 deskstation-firmware/build/
