@@ -33,8 +33,8 @@ static void autoscroll_cb(lv_timer_t *t);
 static void autoscroll_cb(lv_timer_t *t)
 {
     (void)t;
-    /* Restore normal 10 s period (handles the one-shot 30 s grace window) */
-    lv_timer_set_period(s_autoscroll, 10000);
+    /* Restore normal 60 s period (handles the one-shot 30 s grace window) */
+    lv_timer_set_period(s_autoscroll, 60000);
 
     int next = (s_active + 1) % CAROUSEL_TILES;
     s_pending_via = "autoscroll";
@@ -119,10 +119,10 @@ static void _on_value_changed(lv_event_t *e)
     }
 
     /* Re-arm the autoscroll: a successful tile change (manual swipe or wrap)
-     * resumes the 10 s cycle. _on_pressed paused it; resuming here means a
+     * resumes the 60 s cycle. _on_pressed paused it; resuming here means a
      * tap-without-swipe stays paused, while a real swipe gets autoscroll back. */
     if (s_autoscroll) {
-        lv_timer_set_period(s_autoscroll, 10000);
+        lv_timer_set_period(s_autoscroll, 60000);
         lv_timer_reset(s_autoscroll);
         lv_timer_resume(s_autoscroll);
     }
@@ -161,8 +161,8 @@ void carousel_init(lv_obj_t *parent)
         s_tiles[i] = tile;
     }
 
-    /* --- autoscroll timer (10 s) --- */
-    s_autoscroll = lv_timer_create(autoscroll_cb, 10000, NULL);
+    /* --- autoscroll timer (60 s) --- */
+    s_autoscroll = lv_timer_create(autoscroll_cb, 60000, NULL);
 
     s_built = true;
 }
