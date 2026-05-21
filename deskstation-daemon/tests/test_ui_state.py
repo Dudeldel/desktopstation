@@ -8,6 +8,8 @@ from deskstation.bridge.protocol import (
     FullscreenMsg,
     JiraTask,
     LockStateMsg,
+    MacroListItem,
+    MacroListMsg,
     MeetingBar,
     Notification,
     PomodoroStateData,
@@ -136,6 +138,25 @@ async def test_set_pomodoro_state_dispatches() -> None:
     assert msg.data.remaining_sec == 1200
 
 
+async def test_set_macro_list_dispatches() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_macro_list(
+        [
+            MacroListItem(id="MAKRO", label="Test"),
+            MacroListItem(id="dev", label="Start work", icon="play", color="green"),
+        ]
+    )
+    msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
+    assert isinstance(msg, MacroListMsg)
+    assert [m.id for m in msg.data.macros] == ["MAKRO", "dev"]
+    # Optional fields default cleanly:
+    assert msg.data.macros[0].icon == ""
+    assert msg.data.macros[0].color == "gray"
+    assert msg.data.macros[1].icon == "play"
+    assert msg.data.macros[1].color == "green"
+
+
 async def test_set_locked_true_dispatches() -> None:
     bridge = MockBridge()
     ui = UIState(bridge)
@@ -247,11 +268,12 @@ async def test_coalesce_last_value_wins() -> None:
 
 
 # ---------------------------------------------------------------------------
-# resend_all: 7 messages (top_bar + 4 screens + pomodoro_state + lock_state)
+# resend_all: 8 messages
+# (top_bar + 4 screens + pomodoro_state + lock_state + macro_list)
 # ---------------------------------------------------------------------------
 
 
-async def test_resend_all_sends_seven_messages() -> None:
+async def test_resend_all_sends_eight_messages() -> None:
     bridge = MockBridge()
     ui = UIState(bridge)
 
@@ -262,7 +284,7 @@ async def test_resend_all_sends_seven_messages() -> None:
 
     await ui.resend_all()
 
-    assert bridge._outbound.qsize() == 7
+    assert bridge._outbound.qsize() == 8
 
 
 async def test_resend_all_message_types() -> None:
@@ -271,7 +293,7 @@ async def test_resend_all_message_types() -> None:
 
     await ui.resend_all()
 
-    msgs = [await bridge.received() for _ in range(7)]
+    msgs = [await bridge.received() for _ in range(8)]
     types = {type(m).__name__ for m in msgs}
     assert types == {
         "TopBarMsg",
@@ -281,6 +303,7 @@ async def test_resend_all_message_types() -> None:
         "Screen4Msg",
         "PomodoroStateMsg",
         "LockStateMsg",
+        "MacroListMsg",
     }
 
 

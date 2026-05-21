@@ -272,6 +272,35 @@ class LockStateMsg(BaseModel):
     data: LockStateData
 
 
+# ---- macro_list (host -> esp): list available macros for the grid overlay ----
+# Firmware renders these as a 4x3 grid behind the MAKRO top-bar button. Item
+# id is what the firmware sends back as macro_trigger.name when tapped.
+
+
+MacroColor = Literal["green", "coral", "blue", "purple", "amber", "gray", "pink", "teal"]
+
+
+class MacroListItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    label: str
+    subtitle: str = ""
+    icon: str = ""
+    color: MacroColor = "gray"
+
+
+class MacroListData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    macros: list[MacroListItem] = Field(default_factory=list)
+
+
+class MacroListMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["macro_list"] = "macro_list"
+    data: MacroListData
+
+
 # ---- esp -> host events ----
 
 
@@ -411,6 +440,7 @@ Envelope = Annotated[
     | PomodoroStateMsg
     | FullscreenMsg
     | LockStateMsg
+    | MacroListMsg
     | TaskClickedMsg
     | PrClickedMsg
     | NotificationClickedMsg

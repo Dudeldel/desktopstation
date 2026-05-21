@@ -25,6 +25,7 @@ static msg_type_t parse_type(const char *t)
     if (strcmp(t, "pomodoro_state") == 0) return MSG_POMODORO_STATE;
     if (strcmp(t, "fullscreen") == 0) return MSG_FULLSCREEN;
     if (strcmp(t, "lock_state") == 0) return MSG_LOCK_STATE;
+    if (strcmp(t, "macro_list") == 0) return MSG_MACRO_LIST;
     return MSG_UNKNOWN;
 }
 
@@ -377,6 +378,27 @@ bool protocol_parse(const char *line, parsed_msg_t *out)
             goto done;
         }
         out->data.lock_state.locked = cJSON_IsTrue(locked_j);
+    } else if (out->type == MSG_MACRO_LIST) {
+        out->data.macro_list.count = 0;
+        cJSON *macros_arr = cJSON_GetObjectItem(data, "macros");
+        if (cJSON_IsArray(macros_arr)) {
+            cJSON *item = NULL;
+            cJSON_ArrayForEach(item, macros_arr) {
+                if (out->data.macro_list.count >= MACRO_LIST_MAX) break;
+                if (!cJSON_IsObject(item)) continue;
+                cJSON *id_j    = cJSON_GetObjectItem(item, "id");
+                cJSON *label_j = cJSON_GetObjectItem(item, "label");
+                if (!cJSON_IsString(id_j) || !cJSON_IsString(label_j)) continue;
+                size_t i = out->data.macro_list.count++;
+                macro_list_item_t *slot = &out->data.macro_list.items[i];
+                strncpy(slot->id, id_j->valuestring, MACRO_ID_MAX - 1);
+                slot->id[MACRO_ID_MAX - 1] = '\0';
+                strncpy(slot->label, label_j->valuestring, MACRO_LABEL_MAX - 1);
+                slot->label[MACRO_LABEL_MAX - 1] = '\0';
+                // icon/color/subtitle fields are accepted on the wire but
+                // ignored in this MVP render (label-only buttons).
+            }
+        }
     }
 
     ok = true;

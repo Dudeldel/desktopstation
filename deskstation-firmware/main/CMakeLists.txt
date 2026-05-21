@@ -9,6 +9,7 @@ idf_component_register(
         "ui/dots.c"
         "ui/fullscreen_overlay.c"
         "ui/lock_overlay.c"
+        "ui/macro_overlay.c"
         "ui/pomodoro_overlay.c"
         "ui/screen_1.c"
         "ui/screen_2.c"

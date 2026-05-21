@@ -17,6 +17,7 @@ typedef enum {
     MSG_POMODORO_STATE,
     MSG_FULLSCREEN,
     MSG_LOCK_STATE,
+    MSG_MACRO_LIST,
     MSG_UNKNOWN,
 } msg_type_t;
 
@@ -186,6 +187,23 @@ typedef struct {
     bool locked;
 } lock_state_payload_t;
 
+// ---- macro_list (host -> esp): items shown in the macro grid overlay ----
+// 4x3 grid → 12 cells; clamp at parse time.
+#define MACRO_LIST_MAX 12
+#define MACRO_ID_MAX 32
+#define MACRO_LABEL_MAX 32
+
+typedef struct {
+    char id[MACRO_ID_MAX];
+    char label[MACRO_LABEL_MAX];
+    // icon/subtitle/color are accepted on the wire but unused in MVP render.
+} macro_list_item_t;
+
+typedef struct {
+    macro_list_item_t items[MACRO_LIST_MAX];
+    size_t count;
+} macro_list_payload_t;
+
 typedef struct {
     msg_type_t type;
     union {
@@ -199,6 +217,7 @@ typedef struct {
         pomodoro_state_payload_t pomo_state;
         fullscreen_payload_t fullscreen;
         lock_state_payload_t lock_state;
+        macro_list_payload_t macro_list;
     } data;
 } parsed_msg_t;
 

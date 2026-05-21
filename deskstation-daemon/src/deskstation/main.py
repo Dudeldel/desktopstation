@@ -19,6 +19,7 @@ from deskstation.bridge.protocol import (
     FullscreenDismissMsg,
     HeartbeatMsg,
     HelloMsg,
+    MacroListItem,
     MacroTriggerMsg,
     MeetingJoinMsg,
     NotificationActionMsg,
@@ -422,6 +423,14 @@ async def _run() -> None:
         macros = MacroExecutor(
             cfg.macros.definitions,
             timeout_sec=cfg.macros.timeout_sec,
+        )
+        # Feed the firmware grid overlay. resend_all picks this up on every
+        # reconnect; one-shot at startup is enough since config is static.
+        ui_state.set_macro_list(
+            [
+                MacroListItem(id=m.id, label=m.label, icon=m.icon)
+                for m in cfg.macros.definitions
+            ]
         )
 
     # ---- M6.6: on-demand standup brief assembler ----

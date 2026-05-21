@@ -7,6 +7,7 @@
 #include "carousel.h"
 #include "fullscreen_overlay.h"
 #include "lock_overlay.h"
+#include "macro_overlay.h"
 #include "pomodoro_overlay.h"
 #include "screen_1.h"
 #include "screen_2.h"
@@ -46,6 +47,29 @@ static void send_line(const char *line)
     memcpy(out.data, line, len);
     out.len = len;
     xQueueSend(usb_cdc_tx_queue(), &out, portMAX_DELAY);
+}
+
+// Registered as macro_overlay's trigger callback: a tap inside a grid cell
+// forwards the cell's macro id here, which we serialize as macro_trigger.name
+// for the host to dispatch to its config-defined macro map.
+static void macro_send_trigger(const char *id)
+{
+    if (!id || !id[0]) return;
+    usb_line_t line;
+    int n = protocol_serialize_macro_trigger(line.data, sizeof(line.data), id);
+    if (n > 0 && (size_t)n < sizeof(line.data)) {
+        line.len = (size_t)n;
+        xQueueSend(usb_cdc_tx_queue(), &line, 0);
+    }
+}
+
+// Top-bar MAKRO button → open the grid overlay (which carries the current
+// macro_list from the host). The argument is the button's current label,
+// which we discard: the overlay decides which macros to show, not the label.
+static void top_bar_macro_clicked(const char *label)
+{
+    (void)label;
+    macro_overlay_show();
 }
 
 static void ui_dispatch_task(void *arg)
@@ -116,6 +140,9 @@ static void ui_dispatch_task(void *arg)
                 fullscreen_overlay_show(&msg.data.fullscreen);
                 carousel_autoscroll_pause();
                 break;
+            case MSG_MACRO_LIST:
+                macro_overlay_set_list(&msg.data.macro_list);
+                break;
             case MSG_LOCK_STATE:
                 if (msg.data.lock_state.locked) {
                     lock_overlay_show();
@@ -181,6 +208,9 @@ void app_main(void)
     // widget construction on core 0 races lvgl_task on core 1 and corrupts
     // LVGL's internal TLSF heap (intermittent StoreProhibited panics).
     ui_build_main_screen();
+    macro_overlay_init();
+    macro_overlay_set_trigger_cb(macro_send_trigger);
+    top_bar_set_macro_handler(top_bar_macro_clicked);
     ESP_ERROR_CHECK(ui_start_lvgl_task());
 
     ESP_ERROR_CHECK(usb_cdc_init());

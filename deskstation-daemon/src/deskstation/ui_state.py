@@ -15,6 +15,9 @@ from deskstation.bridge.protocol import (
     JiraTask,
     LockStateData,
     LockStateMsg,
+    MacroListData,
+    MacroListItem,
+    MacroListMsg,
     MeetingBar,
     Notification,
     PomodoroStateData,
@@ -85,6 +88,7 @@ class UIState:
         self._pomodoro_state = PomodoroStateData(state="idle")
         self._fullscreen: FullscreenData | None = None
         self._locked = False
+        self._macro_list: list[MacroListItem] = []
 
     # ---- setters ----
 
@@ -161,6 +165,16 @@ class UIState:
         if data is not None:
             self._schedule_send("fullscreen")
 
+    def set_macro_list(self, items: list[MacroListItem]) -> None:
+        """Set the list of macros the firmware should show in its grid overlay.
+
+        Static for the lifetime of the daemon (config is loaded once at
+        startup); we still treat it as a screen so resend_all picks it up
+        cleanly on every reconnect.
+        """
+        self._macro_list = items
+        self._schedule_send("macro_list")
+
     def set_locked(self, locked: bool) -> None:
         """Set the host-lock state. Authoritative both ways — explicit on/off.
 
@@ -191,6 +205,8 @@ class UIState:
             return FullscreenMsg(data=self._fullscreen)
         if key == "lock_state":
             return LockStateMsg(data=LockStateData(locked=self._locked))
+        if key == "macro_list":
+            return MacroListMsg(data=MacroListData(macros=self._macro_list))
         raise ValueError(f"unknown key: {key}")
 
     def _schedule_send(self, key: str) -> None:
@@ -225,6 +241,7 @@ class UIState:
             "screen_4",
             "pomodoro_state",
             "lock_state",
+            "macro_list",
         )
         for key in keys:
             try:
