@@ -16,6 +16,7 @@ typedef enum {
     MSG_SCREEN_4,
     MSG_POMODORO_STATE,
     MSG_FULLSCREEN,
+    MSG_LOCK_STATE,
     MSG_UNKNOWN,
 } msg_type_t;
 
@@ -180,6 +181,11 @@ typedef struct {
     bool dismissible;
 } fullscreen_payload_t;
 
+// ---- lock_state (host -> esp): opaque overlay while host PC is locked ----
+typedef struct {
+    bool locked;
+} lock_state_payload_t;
+
 typedef struct {
     msg_type_t type;
     union {
@@ -192,6 +198,7 @@ typedef struct {
         screen4_payload_t screen_4;
         pomodoro_state_payload_t pomo_state;
         fullscreen_payload_t fullscreen;
+        lock_state_payload_t lock_state;
     } data;
 } parsed_msg_t;
 

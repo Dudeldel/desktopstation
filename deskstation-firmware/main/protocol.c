@@ -24,6 +24,7 @@ static msg_type_t parse_type(const char *t)
     if (strcmp(t, "screen_4") == 0) return MSG_SCREEN_4;
     if (strcmp(t, "pomodoro_state") == 0) return MSG_POMODORO_STATE;
     if (strcmp(t, "fullscreen") == 0) return MSG_FULLSCREEN;
+    if (strcmp(t, "lock_state") == 0) return MSG_LOCK_STATE;
     return MSG_UNKNOWN;
 }
 
@@ -369,6 +370,13 @@ bool protocol_parse(const char *line, parsed_msg_t *out)
                 out->data.fullscreen.activities[i][sizeof(out->data.fullscreen.activities[i]) - 1] = '\0';
             }
         }
+    } else if (out->type == MSG_LOCK_STATE) {
+        cJSON *locked_j = cJSON_GetObjectItem(data, "locked");
+        if (!cJSON_IsBool(locked_j)) {
+            ESP_LOGW(TAG, "lock_state missing locked");
+            goto done;
+        }
+        out->data.lock_state.locked = cJSON_IsTrue(locked_j);
     }
 
     ok = true;

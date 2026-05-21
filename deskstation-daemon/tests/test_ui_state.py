@@ -7,6 +7,7 @@ from deskstation.bridge.protocol import (
     FullscreenData,
     FullscreenMsg,
     JiraTask,
+    LockStateMsg,
     MeetingBar,
     Notification,
     PomodoroStateData,
@@ -135,6 +136,46 @@ async def test_set_pomodoro_state_dispatches() -> None:
     assert msg.data.remaining_sec == 1200
 
 
+async def test_set_locked_true_dispatches() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_locked(True)
+    msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
+    assert isinstance(msg, LockStateMsg)
+    assert msg.data.locked is True
+
+
+async def test_set_locked_false_dispatches() -> None:
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_locked(False)
+    msg = await asyncio.wait_for(bridge.received(), timeout=1.0)
+    assert isinstance(msg, LockStateMsg)
+    assert msg.data.locked is False
+
+
+async def test_resend_all_carries_current_lock_state() -> None:
+    # If the panel reboots while host is locked, resend_all must push
+    # locked=True so the overlay re-appears on the next snapshot.
+    bridge = MockBridge()
+    ui = UIState(bridge)
+    ui.set_locked(True)
+    await _drain_pending(ui)
+    # Drain whatever the setter pushed.
+    while not bridge._outbound.empty():
+        await bridge.received()
+
+    await ui.resend_all()
+
+    seen: list[LockStateMsg] = []
+    while not bridge._outbound.empty():
+        msg = await bridge.received()
+        if isinstance(msg, LockStateMsg):
+            seen.append(msg)
+    assert len(seen) == 1
+    assert seen[0].data.locked is True
+
+
 async def test_set_fullscreen_dispatches() -> None:
     bridge = MockBridge()
     ui = UIState(bridge)
@@ -206,11 +247,11 @@ async def test_coalesce_last_value_wins() -> None:
 
 
 # ---------------------------------------------------------------------------
-# resend_all: 6 messages (top_bar + 4 screens + pomodoro_state)
+# resend_all: 7 messages (top_bar + 4 screens + pomodoro_state + lock_state)
 # ---------------------------------------------------------------------------
 
 
-async def test_resend_all_sends_six_messages() -> None:
+async def test_resend_all_sends_seven_messages() -> None:
     bridge = MockBridge()
     ui = UIState(bridge)
 
@@ -221,7 +262,7 @@ async def test_resend_all_sends_six_messages() -> None:
 
     await ui.resend_all()
 
-    assert bridge._outbound.qsize() == 6
+    assert bridge._outbound.qsize() == 7
 
 
 async def test_resend_all_message_types() -> None:
@@ -230,7 +271,7 @@ async def test_resend_all_message_types() -> None:
 
     await ui.resend_all()
 
-    msgs = [await bridge.received() for _ in range(6)]
+    msgs = [await bridge.received() for _ in range(7)]
     types = {type(m).__name__ for m in msgs}
     assert types == {
         "TopBarMsg",
@@ -239,6 +280,7 @@ async def test_resend_all_message_types() -> None:
         "Screen3Msg",
         "Screen4Msg",
         "PomodoroStateMsg",
+        "LockStateMsg",
     }
 
 

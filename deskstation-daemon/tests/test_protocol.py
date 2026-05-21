@@ -373,6 +373,30 @@ def test_parse_standup_request() -> None:
     assert env.type == "standup_request"
 
 
+def test_parse_lock_state_locked() -> None:
+    from deskstation.bridge.protocol import LockStateMsg
+
+    line = '{"v":1,"type":"lock_state","data":{"locked":true}}'
+    env = parse_envelope(line)
+    assert isinstance(env, LockStateMsg)
+    assert env.data.locked is True
+
+
+def test_parse_lock_state_unlocked() -> None:
+    from deskstation.bridge.protocol import LockStateMsg
+
+    line = '{"v":1,"type":"lock_state","data":{"locked":false}}'
+    env = parse_envelope(line)
+    assert isinstance(env, LockStateMsg)
+    assert env.data.locked is False
+
+
+def test_parse_lock_state_rejects_missing_locked() -> None:
+    line = '{"v":1,"type":"lock_state","data":{}}'
+    with pytest.raises(ValidationError):
+        parse_envelope(line)
+
+
 def test_parse_pomodoro_action_all_variants() -> None:
     for action in ("pause", "resume", "stop_with_log", "cancel", "start_loose", "skip_break"):
         line = f'{{"v":1,"type":"pomodoro_action","data":{{"action":"{action}"}}}}'

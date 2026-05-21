@@ -6,6 +6,7 @@
 #include "top_bar.h"
 #include "carousel.h"
 #include "fullscreen_overlay.h"
+#include "lock_overlay.h"
 #include "pomodoro_overlay.h"
 #include "screen_1.h"
 #include "screen_2.h"
@@ -114,6 +115,15 @@ static void ui_dispatch_task(void *arg)
             case MSG_FULLSCREEN:
                 fullscreen_overlay_show(&msg.data.fullscreen);
                 carousel_autoscroll_pause();
+                break;
+            case MSG_LOCK_STATE:
+                if (msg.data.lock_state.locked) {
+                    lock_overlay_show();
+                    carousel_autoscroll_pause();
+                } else {
+                    lock_overlay_hide();
+                    carousel_autoscroll_resume();
+                }
                 break;
             case MSG_HELLO:
             case MSG_SCREEN_CHANGED:

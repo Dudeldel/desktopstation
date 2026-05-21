@@ -108,3 +108,7 @@ standup:
 reminders:
   enabled: false
   interval_sec: 1500               # 25 min — alternates water / eyes
+
+# ---- M7: screensaver lock detection ----
+screensaver:
+  enabled: false  # listens to org.freedesktop.ScreenSaver.ActiveChanged on session dbus

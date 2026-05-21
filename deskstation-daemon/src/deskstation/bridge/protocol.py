@@ -257,6 +257,21 @@ class FullscreenMsg(BaseModel):
     data: FullscreenData
 
 
+# ---- lock_state (host -> esp): opaque overlay while host PC is locked ----
+
+
+class LockStateData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    locked: bool
+
+
+class LockStateMsg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    v: Literal[1] = 1
+    type: Literal["lock_state"] = "lock_state"
+    data: LockStateData
+
+
 # ---- esp -> host events ----
 
 
@@ -395,6 +410,7 @@ Envelope = Annotated[
     | Screen4Msg
     | PomodoroStateMsg
     | FullscreenMsg
+    | LockStateMsg
     | TaskClickedMsg
     | PrClickedMsg
     | NotificationClickedMsg

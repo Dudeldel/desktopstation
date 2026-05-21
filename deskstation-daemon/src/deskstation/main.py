@@ -44,6 +44,7 @@ from deskstation.engines.screen2_merger import Screen2Merger
 from deskstation.engines.standup import StandupEngine
 from deskstation.executors.macros import MacroExecutor
 from deskstation.listeners.dbus_notifications import DbusNotificationListener
+from deskstation.listeners.screensaver import ScreensaverListener
 from deskstation.listeners.todo_file import TodoFileListener
 from deskstation.logging_setup import configure_logging
 from deskstation.pollers.bitbucket import BitbucketPoller
@@ -441,6 +442,24 @@ async def _run() -> None:
             git_author_email=email,
         )
 
+    # ---- M7: screensaver lock detection ----
+    screensaver_listener: ScreensaverListener | None = None
+    if cfg.screensaver.enabled:
+
+        async def _on_lock_change(locked: bool) -> None:
+            ui_state.set_locked(locked)
+
+        screensaver_listener = ScreensaverListener(_on_lock_change)
+        try:
+            await screensaver_listener.start()
+        except Exception as exc:
+            log.warning(
+                "screensaver_listener_unavailable",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            screensaver_listener = None
+
     pomodoro = PomodoroEngine(
         ui_state,
         pomodoro_store,
@@ -576,6 +595,8 @@ async def _run() -> None:
         await weather_client.aclose()
     if dbus_listener is not None:
         await dbus_listener.stop()
+    if screensaver_listener is not None:
+        await screensaver_listener.stop()
     if todo_listener is not None:
         todo_listener.stop()
     pomodoro_store.close()

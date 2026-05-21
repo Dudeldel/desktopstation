@@ -136,6 +136,11 @@ class RemindersConfig(BaseModel):
     interval_sec: float = 25 * 60
 
 
+class ScreensaverConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     serial: SerialConfig = Field(default_factory=SerialConfig)
@@ -155,6 +160,7 @@ class Config(BaseModel):
     macros: MacroConfig = Field(default_factory=MacroConfig)
     standup: StandupConfig = Field(default_factory=StandupConfig)
     reminders: RemindersConfig = Field(default_factory=RemindersConfig)
+    screensaver: ScreensaverConfig = Field(default_factory=ScreensaverConfig)
 
 
 def load_config(path: Path | None = None) -> Config:

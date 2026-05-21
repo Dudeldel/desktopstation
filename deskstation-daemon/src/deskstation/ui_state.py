@@ -13,6 +13,8 @@ from deskstation.bridge.protocol import (
     FullscreenData,
     FullscreenMsg,
     JiraTask,
+    LockStateData,
+    LockStateMsg,
     MeetingBar,
     Notification,
     PomodoroStateData,
@@ -82,6 +84,7 @@ class UIState:
         self._screen_4 = Screen4Data()
         self._pomodoro_state = PomodoroStateData(state="idle")
         self._fullscreen: FullscreenData | None = None
+        self._locked = False
 
     # ---- setters ----
 
@@ -158,6 +161,15 @@ class UIState:
         if data is not None:
             self._schedule_send("fullscreen")
 
+    def set_locked(self, locked: bool) -> None:
+        """Set the host-lock state. Authoritative both ways — explicit on/off.
+
+        The firmware cannot dismiss this overlay; only the host (driven by
+        the screensaver listener) can flip the bool back to ``False``.
+        """
+        self._locked = locked
+        self._schedule_send("lock_state")
+
     # ---- dispatch ----
 
     def _build_msg(self, key: str) -> object:
@@ -177,6 +189,8 @@ class UIState:
             if self._fullscreen is None:
                 raise ValueError("fullscreen requested but none set")
             return FullscreenMsg(data=self._fullscreen)
+        if key == "lock_state":
+            return LockStateMsg(data=LockStateData(locked=self._locked))
         raise ValueError(f"unknown key: {key}")
 
     def _schedule_send(self, key: str) -> None:
@@ -210,6 +224,7 @@ class UIState:
             "screen_3",
             "screen_4",
             "pomodoro_state",
+            "lock_state",
         )
         for key in keys:
             try:
