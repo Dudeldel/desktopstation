@@ -218,7 +218,7 @@ weather:
   poll_interval_sec: 900
 claude_usage:
   enabled: true
-  argv: ["ccusage", "--json"]
+  command: ["ccusage", "--json"]
   poll_interval_sec: 300
 todo:
   enabled: true
